@@ -1,0 +1,11 @@
+[2026-01-04 18:33:41] Użytkownik q zarejstrował się
+[2026-01-04 18:34:58] Użytkownik a zalogował się
+[2026-01-04 18:36:21] Użytkownik aaa zalogował się
+[2026-01-04 18:36:31] Utworzono grupę o nazwie: rts członkowie grupy: aaa,maciej,pawel
+[2026-01-04 18:37:01] Użytkownik a zalogował się
+[2026-01-04 18:37:07] Utworzono grupę o nazwie: turrthgffgh, członkowie grupy: a, b, aaa, maciej, pawel, q
+[2026-01-04 18:37:48] Użytkownik maciej zalogował się
+[2026-01-04 18:39:31] Użytkownik a zalogował się
+[2026-01-04 18:40:10] Użytkownik a zalogował się
+[2026-01-04 18:40:14] Użytkownik a wylogował się
+[2026-01-04 18:40:41] Użytkownik aaa zalogował się

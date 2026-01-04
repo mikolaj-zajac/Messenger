@@ -1,0 +1,12 @@
+a;a
+b;b
+group:aaaaaa;aaa,a,b,maciej
+group:ctsk;aaa,maciej,pawel
+aaa;aaa
+maciej;a
+pawel;a
+group:cccccc;aaa,b,maciej
+group:aaaaa;aaa,a,b,maciej,pawel
+q;q
+group:rts;aaa,maciej,pawel
+group:turrthgffgh;a,b,aaa,maciej,pawel,q
