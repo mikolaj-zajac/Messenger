@@ -8,6 +8,8 @@ import service.AutomaticServerFinder;
 public class SimpleServer {
     private static final int CHAT_PORT = 12345;
     private static Map<String, ClientHandler> clients = new HashMap<>();
+    private static final String MESSAGES_FILE = "server_messages.txt";
+    private static final String ONLINE_FILE = "server_online.txt";
 
     public static void main(String[] args) throws IOException {
         System.out.println("=== Messenger Server ===");
@@ -16,29 +18,12 @@ public class SimpleServer {
 
         System.out.println("Uruchamianie serwera czatu na porcie: " + CHAT_PORT);
 
+        // Utwórz pliki serwera
+        new File(MESSAGES_FILE).delete();
+        new File(ONLINE_FILE).delete();
+
         ServerSocket serverSocket = new ServerSocket(CHAT_PORT);
         System.out.println("Serwer gotowy!");
-        System.out.println("Adresy serwera:");
-
-        try {
-            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
-            List<NetworkInterface> interfaceList = Collections.list(interfaces);
-
-            for (NetworkInterface iface : interfaceList) {
-                if (iface.isLoopback() || !iface.isUp()) continue;
-
-                Enumeration<InetAddress> addresses = iface.getInetAddresses();
-                List<InetAddress> addressList = Collections.list(addresses);
-
-                for (InetAddress addr : addressList) {
-                    if (addr instanceof Inet4Address) {
-                        System.out.println("  - " + addr.getHostAddress() + ":" + CHAT_PORT);
-                    }
-                }
-            }
-        } catch (SocketException e) {
-            e.printStackTrace();
-        }
 
         // Czyszczenie starych połączeń co 30 sekund
         new Timer().schedule(new TimerTask() {
@@ -61,6 +46,7 @@ public class SimpleServer {
             if (!entry.getValue().isAlive()) {
                 System.out.println("Usuwam nieaktywnego klienta: " + entry.getKey());
                 iterator.remove();
+                removeFromOnlineFile(entry.getKey());
             }
         }
     }
@@ -80,6 +66,114 @@ public class SimpleServer {
         }
     }
 
+    private static synchronized void saveMessageToFile(String from, String to, String message) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(MESSAGES_FILE, true))) {
+            String timestamp = System.currentTimeMillis() + "|" + from + "|" + to + "|" + message;
+            writer.write(timestamp);
+            writer.newLine();
+            System.out.println("Zapisano wiadomość: " + from + " -> " + to);
+        } catch (IOException e) {
+            System.err.println("Błąd zapisu wiadomości: " + e.getMessage());
+        }
+    }
+
+    private static synchronized List<String> getMessagesForUser(String username) {
+        List<String> messages = new ArrayList<>();
+        File file = new File(MESSAGES_FILE);
+
+        if (!file.exists()) {
+            return messages;
+        }
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] parts = line.split("\\|", 4);
+                if (parts.length == 4) {
+                    String to = parts[2];
+                    String from = parts[1];
+                    if (to.equals(username) || from.equals(username)) {
+                        messages.add(line);
+                    }
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Błąd odczytu wiadomości: " + e.getMessage());
+        }
+
+        return messages;
+    }
+
+    private static synchronized void addToOnlineFile(String username) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(ONLINE_FILE, true))) {
+            writer.write(username + "|" + System.currentTimeMillis());
+            writer.newLine();
+        } catch (IOException e) {
+            System.err.println("Błąd zapisu online: " + e.getMessage());
+        }
+    }
+
+    private static synchronized void removeFromOnlineFile(String username) {
+        try {
+            File tempFile = new File(ONLINE_FILE + ".tmp");
+            File originalFile = new File(ONLINE_FILE);
+
+            if (!originalFile.exists()) {
+                return;
+            }
+
+            try (BufferedReader reader = new BufferedReader(new FileReader(originalFile));
+                 BufferedWriter writer = new BufferedWriter(new FileWriter(tempFile))) {
+
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String[] parts = line.split("\\|");
+                    if (parts.length > 0 && !parts[0].equals(username)) {
+                        writer.write(line);
+                        writer.newLine();
+                    }
+                }
+            }
+
+            originalFile.delete();
+            tempFile.renameTo(originalFile);
+
+        } catch (IOException e) {
+            System.err.println("Błąd usuwania z online: " + e.getMessage());
+        }
+    }
+
+    private static synchronized List<String> getOnlineUsers() {
+        List<String> onlineUsers = new ArrayList<>();
+        File file = new File(ONLINE_FILE);
+
+        if (!file.exists()) {
+            return onlineUsers;
+        }
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            long currentTime = System.currentTimeMillis();
+
+            while ((line = reader.readLine()) != null) {
+                String[] parts = line.split("\\|");
+                if (parts.length == 2) {
+                    String username = parts[0];
+                    long timestamp = Long.parseLong(parts[1]);
+
+                    // Jeśli aktywny w ciągu ostatnich 60 sekund
+                    if (currentTime - timestamp < 60000) {
+                        onlineUsers.add(username);
+                    }
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Błąd odczytu online: " + e.getMessage());
+        }
+
+        return onlineUsers;
+    }
+
     private static class ClientHandler implements Runnable {
         private Socket socket;
         private PrintWriter out;
@@ -93,7 +187,7 @@ public class SimpleServer {
         }
 
         public boolean isAlive() {
-            return (System.currentTimeMillis() - lastActivity) < 60000; // 60 sekund
+            return (System.currentTimeMillis() - lastActivity) < 60000;
         }
 
         public void send(String message) {
@@ -116,23 +210,29 @@ public class SimpleServer {
 
                     synchronized (SimpleServer.class) {
                         clients.put(username, this);
+                        addToOnlineFile(username);
                     }
 
                     out.println("LOGIN_OK:" + username);
 
-                    // Powiadom innych o nowym użytkowniku
-                    broadcast("USER_ONLINE:" + username, username);
+                    // Wyślij historię wiadomości
+                    List<String> userMessages = getMessagesForUser(username);
+                    for (String msg : userMessages) {
+                        out.println("HISTORY:" + msg);
+                    }
 
                     // Wyślij listę online użytkowników
+                    List<String> onlineUsers = getOnlineUsers();
                     StringBuilder onlineList = new StringBuilder("ONLINE_LIST:");
-                    synchronized (SimpleServer.class) {
-                        for (String user : clients.keySet()) {
-                            if (!user.equals(username)) {
-                                onlineList.append(user).append(",");
-                            }
+                    for (String user : onlineUsers) {
+                        if (!user.equals(username)) {
+                            onlineList.append(user).append(",");
                         }
                     }
                     out.println(onlineList.toString());
+
+                    // Powiadom innych o nowym użytkowniku
+                    broadcast("USER_ONLINE:" + username, username);
 
                     System.out.println(username + " dołączył do czatu");
 
@@ -140,6 +240,7 @@ public class SimpleServer {
                     String message;
                     while ((message = in.readLine()) != null) {
                         lastActivity = System.currentTimeMillis();
+                        addToOnlineFile(username); // Odśwież status online
 
                         if (message.equals("PING")) {
                             out.println("PONG");
@@ -150,8 +251,18 @@ public class SimpleServer {
                                 String to = parts[1];
                                 String msg = parts[2];
 
+                                // Zapisz wiadomość
+                                saveMessageToFile(username, to, msg);
+
+                                // Wyślij do odbiorcy jeśli online
                                 sendToUser(to, "PRIVATE_MSG:" + username + ":" + msg);
                                 out.println("MSG_SENT:" + to);
+                            }
+                        }
+                        else if (message.equals("GET_HISTORY")) {
+                            List<String> history = getMessagesForUser(username);
+                            for (String msg : history) {
+                                out.println("HISTORY:" + msg);
                             }
                         }
                         else if (message.equals("LOGOUT")) {
@@ -164,7 +275,7 @@ public class SimpleServer {
                 }
 
             } catch (IOException e) {
-                System.out.println("Błąd połączenia z " + username);
+                System.out.println("Błąd połączenia z " + username + ": " + e.getMessage());
             } finally {
                 cleanup();
             }
@@ -174,6 +285,7 @@ public class SimpleServer {
             if (username != null) {
                 synchronized (SimpleServer.class) {
                     clients.remove(username);
+                    removeFromOnlineFile(username);
                 }
                 broadcast("USER_OFFLINE:" + username, username);
                 System.out.println(username + " wyszedł z czatu");

@@ -82,3 +82,4 @@
 [2026-01-05 21:41:17] Użytkownik a wylogował się
 [2026-01-05 21:41:23] Użytkownik b wylogował się
 [2026-01-05 21:43:04] Użytkownik a zalogował się
+[2026-01-05 21:51:52] Użytkownik a zalogował się

@@ -7,33 +7,23 @@ import service.UserService;
 
 import javax.swing.*;
 import java.awt.*;
-import java.io.*;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
 public class PrivateChatFrame extends JFrame {
     private User currentUser;
     private String otherUser;
-    private UserService userService;
     private SimpleChatClient networkClient;
 
     private JTextArea chatArea;
     private JTextField messageField;
-    private javax.swing.Timer refreshTimer;
-    private javax.swing.Timer statusTimer;
-    private static final String MESSAGES_DIR = "Messenger/data/private/";
     private SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss");
     private JLabel statusLabel;
 
     public PrivateChatFrame(User currentUser, String otherUser, SimpleChatClient networkClient) {
         this.currentUser = currentUser;
         this.otherUser = otherUser;
-        this.userService = new UserService();
         this.networkClient = networkClient;
-
-        if (networkClient != null) {
-            networkClient.setMessageCallback(this::onNetworkMessage);
-        }
 
         setTitle("Czat z " + otherUser);
         setSize(500, 400);
@@ -41,10 +31,12 @@ public class PrivateChatFrame extends JFrame {
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
 
         initUI();
-        loadMessages();
-        startAutoRefresh();
-        startStatusChecker();
-        updateOwnOnlineStatus();
+
+        if (networkClient != null && networkClient.isConnected()) {
+            setupNetworkCallbacks();
+        }
+
+        loadMessagesFromHistory();
         setVisible(true);
     }
 
@@ -52,7 +44,7 @@ public class PrivateChatFrame extends JFrame {
         JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        // Górny panel z nazwą i statusem
+        // Górny panel
         JPanel topPanel = new JPanel(new BorderLayout());
 
         JButton backBtn = new JButton("←");
@@ -61,19 +53,10 @@ public class PrivateChatFrame extends JFrame {
 
         statusLabel = new JLabel(otherUser, SwingConstants.CENTER);
         statusLabel.setFont(new Font("Arial", Font.BOLD, 14));
-        updateStatusLabel();
-
-        JButton refreshBtn = new JButton("🔄");
-        refreshBtn.setToolTipText("Odśwież");
-        refreshBtn.setFocusPainted(false);
-        refreshBtn.addActionListener(e -> {
-            loadMessages();
-            updateStatusLabel();
-        });
+        updateStatus();
 
         topPanel.add(backBtn, BorderLayout.WEST);
         topPanel.add(statusLabel, BorderLayout.CENTER);
-        topPanel.add(refreshBtn, BorderLayout.EAST);
 
         mainPanel.add(topPanel, BorderLayout.NORTH);
 
@@ -83,7 +66,6 @@ public class PrivateChatFrame extends JFrame {
         chatArea.setLineWrap(true);
         chatArea.setWrapStyleWord(true);
         chatArea.setFont(new Font("Arial", Font.PLAIN, 12));
-        chatArea.setBackground(new Color(250, 250, 250));
 
         JScrollPane scrollPane = new JScrollPane(chatArea);
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
@@ -111,161 +93,85 @@ public class PrivateChatFrame extends JFrame {
         add(mainPanel);
     }
 
-    private void updateStatusLabel() {
-        boolean isOnline = userService.isUserOnline(otherUser);
+    private void setupNetworkCallbacks() {
+        // Callback dla przychodzących wiadomości
+        networkClient.setPrivateMessageCallback(this::onPrivateMessage);
 
-        if (isOnline) {
+        // Callback dla historii
+        networkClient.setHistoryCallback((from, message) -> {
+            if (from.equals(otherUser)) {
+                displayMessage(from, message);
+            }
+        });
+    }
+
+    private void updateStatus() {
+        if (networkClient != null && networkClient.isConnected()) {
             statusLabel.setText("🟢 " + otherUser + " (online)");
             statusLabel.setForeground(new Color(0, 150, 0));
-            statusLabel.setFont(new Font("Arial", Font.BOLD, 14));
         } else {
             statusLabel.setText("⚫ " + otherUser + " (offline)");
             statusLabel.setForeground(Color.GRAY);
-            statusLabel.setFont(new Font("Arial", Font.PLAIN, 14));
         }
     }
 
-    private void updateOwnOnlineStatus() {
-        userService.updateUserOnlineStatus(currentUser.getUsername());
-    }
-
-    // JEDNA metoda sendMessage
     private void sendMessage() {
         String text = messageField.getText().trim();
         if (!text.isEmpty()) {
             String timestamp = timeFormat.format(new Date());
 
-            // Wyświetl w oknie
-            chatArea.append("[" + timestamp + "] Ja: " + text + "\n");
+            // Wyświetl lokalnie
+            displayMessage(currentUser.getUsername(), text);
 
-            // Wyślij przez sieć jeśli jest połączenie
+            // Wyślij przez serwer
             if (networkClient != null && networkClient.isConnected()) {
                 networkClient.sendPrivateMessage(otherUser, text);
+            } else {
+                JOptionPane.showMessageDialog(this,
+                        "Brak połączenia z serwerem. Wiadomość nie została wysłana.",
+                        "Błąd",
+                        JOptionPane.WARNING_MESSAGE);
             }
 
-            // Zawsze zapisz do pliku (na wypadek braku sieci)
-            saveMessageToFile(timestamp, currentUser.getUsername(), otherUser, text);
-
-            // Wyczyść pole
             messageField.setText("");
-
-            // Zaktualizuj swój status online
-            updateOwnOnlineStatus();
-
-            LoggerService.write("Prywatnie: " + currentUser.getUsername() + " -> " + otherUser + ": " + text);
-
-            // Przewiń na dół
-            chatArea.setCaretPosition(chatArea.getDocument().getLength());
+            LoggerService.write(currentUser.getUsername() + " -> " + otherUser + ": " + text);
         }
     }
 
-    // Metoda do zapisu wiadomości do pliku
-    private void saveMessageToFile(String timestamp, String from, String to, String text) {
-        try {
-            new File(MESSAGES_DIR).mkdirs();
-            String filename = getChatFilename(from, to);
-
-            try (BufferedWriter writer = new BufferedWriter(new FileWriter(filename, true))) {
-                writer.write(timestamp + "|" + from + "|" + to + "|" + text);
-                writer.newLine();
-            }
-        } catch (IOException e) {
-            JOptionPane.showMessageDialog(this, "Błąd zapisu: " + e.getMessage());
-        }
-    }
-
-    private String getChatFilename(String user1, String user2) {
-        String[] users = {user1, user2};
-        java.util.Arrays.sort(users);
-        return MESSAGES_DIR + users[0] + "_" + users[1] + ".txt";
-    }
-
-    private void loadMessages() {
-        String filename = getChatFilename(currentUser.getUsername(), otherUser);
-        File file = new File(filename);
-
-        if (file.exists()) {
-            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-                chatArea.setText("");
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    String[] parts = line.split("\\|", 4);
-                    if (parts.length == 4) {
-                        String time = parts[0];
-                        String from = parts[1];
-                        String to = parts[2];
-                        String text = parts[3];
-
-                        String displayName = from.equals(currentUser.getUsername()) ? "Ja" : otherUser;
-                        chatArea.append("[" + time + "] " + displayName + ": " + text + "\n");
-                    }
-                }
-                chatArea.setCaretPosition(chatArea.getDocument().getLength());
-            } catch (IOException e) {
-                JOptionPane.showMessageDialog(this, "Błąd odczytu: " + e.getMessage());
-            }
-        }
-    }
-
-    private void startAutoRefresh() {
-        refreshTimer = new javax.swing.Timer(2000, e -> {
-            checkForNewMessages();
-            updateOwnOnlineStatus(); // Zawsze aktualizuj swój status gdy okno jest otwarte
-        });
-        refreshTimer.start();
-    }
-
-    private void startStatusChecker() {
-        statusTimer = new javax.swing.Timer(3000, e -> updateStatusLabel());
-        statusTimer.start();
-    }
-
-    private void checkForNewMessages() {
-        String filename = getChatFilename(currentUser.getUsername(), otherUser);
-        File file = new File(filename);
-
-        if (file.exists()) {
-            long lastModified = file.lastModified();
-            long currentTime = System.currentTimeMillis();
-
-            if (currentTime - lastModified < 3000) {
-                loadMessages();
-
-                if (!isActive()) {
-                    Toolkit.getDefaultToolkit().beep();
-                }
-            }
-        }
-    }
-
-    private void onNetworkMessage(String from, String text) {
+    private void onPrivateMessage(String from, String text) {
         if (from.equals(otherUser)) {
             SwingUtilities.invokeLater(() -> {
-                String timestamp = timeFormat.format(new Date());
-                chatArea.append("[" + timestamp + "] " + otherUser + ": " + text + "\n");
-
-                // Zapisz też do pliku
-                saveMessageToFile(timestamp, from, currentUser.getUsername(), text);
+                displayMessage(from, text);
 
                 // Powiadomienie
                 if (!isActive()) {
                     Toolkit.getDefaultToolkit().beep();
                 }
-
-                // Przewiń na dół
-                chatArea.setCaretPosition(chatArea.getDocument().getLength());
             });
         }
     }
 
+    private void displayMessage(String from, String text) {
+        String timestamp = timeFormat.format(new Date());
+        String displayName = from.equals(currentUser.getUsername()) ? "Ja" : from;
+
+        chatArea.append("[" + timestamp + "] " + displayName + ": " + text + "\n");
+        chatArea.setCaretPosition(chatArea.getDocument().getLength());
+    }
+
+    private void loadMessagesFromHistory() {
+        if (networkClient != null) {
+            // Wiadomości są już ładowane przez historyCallback
+            return;
+        }
+
+        // Tryb lokalny - możesz tu dodać ładowanie z pliku
+        chatArea.append("=== Tryb lokalny ===\n");
+    }
+
     @Override
     public void dispose() {
-        if (refreshTimer != null) {
-            refreshTimer.stop();
-        }
-        if (statusTimer != null) {
-            statusTimer.stop();
-        }
         super.dispose();
+        LoggerService.write("Zamknięto czat " + currentUser.getUsername() + " z " + otherUser);
     }
 }
