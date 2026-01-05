@@ -81,3 +81,4 @@
 [2026-01-05 21:41:12] Prywatnie: a -> b: co tam
 [2026-01-05 21:41:17] Użytkownik a wylogował się
 [2026-01-05 21:41:23] Użytkownik b wylogował się
+[2026-01-05 21:43:04] Użytkownik a zalogował się
