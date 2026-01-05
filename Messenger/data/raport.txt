@@ -83,3 +83,18 @@
 [2026-01-05 21:41:23] Użytkownik b wylogował się
 [2026-01-05 21:43:04] Użytkownik a zalogował się
 [2026-01-05 21:51:52] Użytkownik a zalogował się
+[2026-01-05 21:54:10] Użytkownik a zalogował się
+[2026-01-05 21:54:56] a -> b: gg
+[2026-01-05 21:54:58] Zamknięto czat a z b
+[2026-01-05 21:55:12] Użytkownik a zalogował się
+[2026-01-05 21:55:17] a -> b: as
+[2026-01-05 21:55:24] a -> b: asasas
+[2026-01-05 21:55:38] Zamknięto czat a z b
+[2026-01-05 21:55:42] Zamknięto czat a z b
+[2026-01-05 21:55:49] a -> b: ccxcvx
+[2026-01-05 21:55:50] Zamknięto czat a z b
+[2026-01-05 21:58:22] a -> b: fdd
+[2026-01-05 21:58:28] Zamknięto czat a z b
+[2026-01-05 21:58:56] Użytkownik b zalogował się
+[2026-01-05 21:59:03] b -> a: c
+[2026-01-05 21:59:29] Zamknięto czat b z a

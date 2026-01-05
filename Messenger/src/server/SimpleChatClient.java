@@ -13,13 +13,14 @@ public class SimpleChatClient {
     private String username;
     private boolean connected = false;
     private Thread listener;
+    private Thread pingThread;
     private BiConsumer<String, String> privateMessageCallback;
     private BiConsumer<String, String> historyCallback;
     private List<String> messageHistory = new ArrayList<>();
 
     public boolean connect(String username) {
         // Próbuj automatycznego wykrycia serwera
-        String serverIP = AutomaticServerFinder.findServerInNetwork(3000);
+        String serverIP = AutomaticServerFinder.findServerInNetwork(5000);
 
         if (serverIP == null) {
             System.out.println("Nie znaleziono serwera. Uruchamiam tryb lokalny.");
@@ -35,7 +36,7 @@ public class SimpleChatClient {
             System.out.println("Łączenie z serwerem: " + serverIP + ":" + port);
 
             socket = new Socket(serverIP, port);
-            socket.setSoTimeout(10000);
+            socket.setSoTimeout(60000); // 60 sekund timeout
 
             out = new PrintWriter(socket.getOutputStream(), true);
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
@@ -54,6 +55,7 @@ public class SimpleChatClient {
             if (response != null && response.startsWith("LOGIN_OK")) {
                 connected = true;
                 startListening();
+                startPingThread();
 
                 // Pobierz historię wiadomości
                 out.println("GET_HISTORY");
@@ -77,13 +79,11 @@ public class SimpleChatClient {
                     if (message.startsWith("PRIVATE_MSG:")) {
                         String[] parts = message.split(":", 3);
                         if (parts.length == 3 && privateMessageCallback != null) {
-                            // Format: PRIVATE_MSG:nadawca:wiadomość
                             privateMessageCallback.accept(parts[1], parts[2]);
                             messageHistory.add(System.currentTimeMillis() + "|" + parts[1] + "|" + username + "|" + parts[2]);
                         }
                     }
                     else if (message.startsWith("HISTORY:")) {
-                        // Format: HISTORY:timestamp|from|to|message
                         String historyData = message.substring(8);
                         messageHistory.add(historyData);
 
@@ -106,16 +106,43 @@ public class SimpleChatClient {
                         String users = message.substring(12);
                         System.out.println("Online użytkownicy: " + users);
                     }
+                    else if (message.equals("PONG")) {
+                        // Pong od serwera - wszystko OK
+                        System.out.println("Pong od serwera");
+                    }
                 }
             } catch (SocketTimeoutException e) {
-                System.out.println("Timeout połączenia");
+                System.out.println("Timeout połączenia - serwer nie odpowiada");
             } catch (IOException e) {
                 System.out.println("Utracono połączenie z serwerem: " + e.getMessage());
             } finally {
                 connected = false;
+                System.out.println("Połączenie zamknięte");
             }
         });
         listener.start();
+    }
+
+    private void startPingThread() {
+        pingThread = new Thread(() -> {
+            while (connected) {
+                try {
+                    Thread.sleep(30000); // Co 30 sekund
+                    if (connected && out != null) {
+                        out.println("PING");
+                        System.out.println("Wysłano ping do serwera");
+                    }
+                } catch (InterruptedException e) {
+                    break;
+                } catch (Exception e) {
+                    System.out.println("Błąd wysyłania ping: " + e.getMessage());
+                    connected = false;
+                    break;
+                }
+            }
+        });
+        pingThread.setDaemon(true);
+        pingThread.start();
     }
 
     public void sendPrivateMessage(String toUser, String text) {
@@ -142,7 +169,7 @@ public class SimpleChatClient {
             out.println("LOGOUT");
         }
         try {
-            if (socket != null) {
+            if (socket != null && !socket.isClosed()) {
                 socket.close();
             }
         } catch (IOException e) {

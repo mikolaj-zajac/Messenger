@@ -23,18 +23,19 @@ public class SimpleServer {
         new File(ONLINE_FILE).delete();
 
         ServerSocket serverSocket = new ServerSocket(CHAT_PORT);
-        System.out.println("Serwer gotowy!");
+        System.out.println("Serwer gotowy! Czekam na połączenia...");
 
-        // Czyszczenie starych połączeń co 30 sekund
+        // Czyszczenie starych połączeń co 60 sekund
         new Timer().schedule(new TimerTask() {
             @Override
             public void run() {
                 cleanupOldConnections();
             }
-        }, 0, 30000);
+        }, 0, 60000);
 
         while (true) {
             Socket clientSocket = serverSocket.accept();
+            System.out.println("Nowe połączenie z: " + clientSocket.getInetAddress());
             new Thread(new ClientHandler(clientSocket)).start();
         }
     }
@@ -161,8 +162,8 @@ public class SimpleServer {
                     String username = parts[0];
                     long timestamp = Long.parseLong(parts[1]);
 
-                    // Jeśli aktywny w ciągu ostatnich 60 sekund
-                    if (currentTime - timestamp < 60000) {
+                    // Jeśli aktywny w ciągu ostatnich 5 minut
+                    if (currentTime - timestamp < 300000) {
                         onlineUsers.add(username);
                     }
                 }
@@ -180,6 +181,7 @@ public class SimpleServer {
         private BufferedReader in;
         private String username;
         private long lastActivity;
+        private boolean running = true;
 
         public ClientHandler(Socket socket) {
             this.socket = socket;
@@ -187,18 +189,22 @@ public class SimpleServer {
         }
 
         public boolean isAlive() {
-            return (System.currentTimeMillis() - lastActivity) < 60000;
+            return (System.currentTimeMillis() - lastActivity) < 300000; // 5 minut
         }
 
         public void send(String message) {
             if (out != null) {
                 out.println(message);
+                out.flush();
             }
         }
 
         @Override
         public void run() {
             try {
+                // Ustaw timeout na socket (5 minut)
+                socket.setSoTimeout(300000);
+
                 in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 out = new PrintWriter(socket.getOutputStream(), true);
 
@@ -214,6 +220,7 @@ public class SimpleServer {
                     }
 
                     out.println("LOGIN_OK:" + username);
+                    System.out.println(username + " zalogował się");
 
                     // Wyślij historię wiadomości
                     List<String> userMessages = getMessagesForUser(username);
@@ -234,13 +241,10 @@ public class SimpleServer {
                     // Powiadom innych o nowym użytkowniku
                     broadcast("USER_ONLINE:" + username, username);
 
-                    System.out.println(username + " dołączył do czatu");
-
-                    // Obsługa wiadomości
+                    // Główna pętla odbioru wiadomości
                     String message;
-                    while ((message = in.readLine()) != null) {
+                    while (running && (message = in.readLine()) != null) {
                         lastActivity = System.currentTimeMillis();
-                        addToOnlineFile(username); // Odśwież status online
 
                         if (message.equals("PING")) {
                             out.println("PONG");
@@ -274,6 +278,8 @@ public class SimpleServer {
                     }
                 }
 
+            } catch (SocketTimeoutException e) {
+                System.out.println("Timeout dla " + username + " - brak aktywności");
             } catch (IOException e) {
                 System.out.println("Błąd połączenia z " + username + ": " + e.getMessage());
             } finally {
@@ -282,17 +288,20 @@ public class SimpleServer {
         }
 
         private void cleanup() {
+            running = false;
             if (username != null) {
                 synchronized (SimpleServer.class) {
                     clients.remove(username);
                     removeFromOnlineFile(username);
                 }
                 broadcast("USER_OFFLINE:" + username, username);
-                System.out.println(username + " wyszedł z czatu");
+                System.out.println(username + " rozłączył się");
             }
 
             try {
-                socket.close();
+                if (socket != null && !socket.isClosed()) {
+                    socket.close();
+                }
             } catch (IOException e) {
                 e.printStackTrace();
             }

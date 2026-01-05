@@ -3,12 +3,13 @@ package gui;
 import model.User;
 import service.LoggerService;
 import service.SimpleChatClient;
-import service.UserService;
 
 import javax.swing.*;
 import java.awt.*;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Timer;
+import java.util.TimerTask;
 
 public class PrivateChatFrame extends JFrame {
     private User currentUser;
@@ -19,6 +20,7 @@ public class PrivateChatFrame extends JFrame {
     private JTextField messageField;
     private SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss");
     private JLabel statusLabel;
+    private Timer connectionCheckTimer;
 
     public PrivateChatFrame(User currentUser, String otherUser, SimpleChatClient networkClient) {
         this.currentUser = currentUser;
@@ -34,6 +36,7 @@ public class PrivateChatFrame extends JFrame {
 
         if (networkClient != null && networkClient.isConnected()) {
             setupNetworkCallbacks();
+            startConnectionChecker();
         }
 
         loadMessagesFromHistory();
@@ -53,10 +56,16 @@ public class PrivateChatFrame extends JFrame {
 
         statusLabel = new JLabel(otherUser, SwingConstants.CENTER);
         statusLabel.setFont(new Font("Arial", Font.BOLD, 14));
-        updateStatus();
+        updateConnectionStatus();
+
+        JButton reconnectBtn = new JButton("↻");
+        reconnectBtn.setToolTipText("Sprawdź połączenie");
+        reconnectBtn.setFocusPainted(false);
+        reconnectBtn.addActionListener(e -> checkConnection());
 
         topPanel.add(backBtn, BorderLayout.WEST);
         topPanel.add(statusLabel, BorderLayout.CENTER);
+        topPanel.add(reconnectBtn, BorderLayout.EAST);
 
         mainPanel.add(topPanel, BorderLayout.NORTH);
 
@@ -94,18 +103,38 @@ public class PrivateChatFrame extends JFrame {
     }
 
     private void setupNetworkCallbacks() {
-        // Callback dla przychodzących wiadomości
         networkClient.setPrivateMessageCallback(this::onPrivateMessage);
-
-        // Callback dla historii
         networkClient.setHistoryCallback((from, message) -> {
-            if (from.equals(otherUser)) {
+            if (from.equals(otherUser) || from.equals(currentUser.getUsername())) {
                 displayMessage(from, message);
             }
         });
     }
 
-    private void updateStatus() {
+    private void startConnectionChecker() {
+        connectionCheckTimer = new Timer();
+        connectionCheckTimer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                checkConnection();
+            }
+        }, 0, 30000); // Co 30 sekund
+    }
+
+    private void checkConnection() {
+        SwingUtilities.invokeLater(() -> {
+            if (networkClient != null && networkClient.isConnected()) {
+                statusLabel.setText("🟢 " + otherUser + " (online)");
+                statusLabel.setForeground(new Color(0, 150, 0));
+            } else {
+                statusLabel.setText("🔴 " + otherUser + " (offline)");
+                statusLabel.setForeground(Color.RED);
+                chatArea.append("[System] Brak połączenia z serwerem\n");
+            }
+        });
+    }
+
+    private void updateConnectionStatus() {
         if (networkClient != null && networkClient.isConnected()) {
             statusLabel.setText("🟢 " + otherUser + " (online)");
             statusLabel.setForeground(new Color(0, 150, 0));
@@ -160,17 +189,19 @@ public class PrivateChatFrame extends JFrame {
     }
 
     private void loadMessagesFromHistory() {
-        if (networkClient != null) {
+        if (networkClient != null && networkClient.isConnected()) {
             // Wiadomości są już ładowane przez historyCallback
-            return;
+            chatArea.append("[System] Połączono z serwerem\n");
+        } else {
+            chatArea.append("[System] Tryb lokalny - tylko wiadomości offline\n");
         }
-
-        // Tryb lokalny - możesz tu dodać ładowanie z pliku
-        chatArea.append("=== Tryb lokalny ===\n");
     }
 
     @Override
     public void dispose() {
+        if (connectionCheckTimer != null) {
+            connectionCheckTimer.cancel();
+        }
         super.dispose();
         LoggerService.write("Zamknięto czat " + currentUser.getUsername() + " z " + otherUser);
     }
