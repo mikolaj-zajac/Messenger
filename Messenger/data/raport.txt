@@ -20,3 +20,8 @@
 [2026-01-05 18:03:13] Użytkownik b zalogował się
 [2026-01-05 18:06:59] Użytkownik a zalogował się
 [2026-01-05 18:07:24] Użytkownik b zalogował się
+[2026-01-05 18:26:44] Użytkownik a zalogował się
+[2026-01-05 18:42:25] Użytkownik a zalogował się
+[2026-01-05 18:48:17] Użytkownik a zalogował się
+[2026-01-05 18:54:43] Użytkownik a zalogował się
+[2026-01-05 18:59:00] Użytkownik a zalogował się

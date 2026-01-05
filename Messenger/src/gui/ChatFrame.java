@@ -77,8 +77,8 @@ public class ChatFrame extends JFrame {
         });
 
         // Próba połączenia z serwerem
-        String serverAddress = System.getProperty("server.url", "localhost");
-        int serverPort = Integer.parseInt(System.getProperty("server.port", "8080"));
+        String serverAddress = "automatic-space-rotary-phone-r4g7gjpvq5xrh5gvp-8080.app.github.dev"; // TYLKO NAZWA HOSTA!
+        int serverPort = 8080; // HTTPS port, nie 8080!
 
         boolean connected = chatClient.connect(
             serverAddress,
