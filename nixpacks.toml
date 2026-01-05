@@ -1,8 +1,0 @@
-[phases.setup]
-cmds = ["apt-get update", "apt-get install -y default-jdk"]
-
-[phases.build]
-cmds = ["javac -d out src/**/*.java server/**/*.java"]
-
-[start]
-cmd = "java -cp out server.ServerMain"

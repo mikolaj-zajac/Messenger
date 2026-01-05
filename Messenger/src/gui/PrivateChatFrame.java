@@ -2,6 +2,7 @@ package gui;
 
 import model.User;
 import service.LoggerService;
+import service.SimpleChatClient;
 import service.UserService;
 
 import javax.swing.*;
@@ -14,6 +15,7 @@ public class PrivateChatFrame extends JFrame {
     private User currentUser;
     private String otherUser;
     private UserService userService;
+    private SimpleChatClient networkClient;
 
     private JTextArea chatArea;
     private JTextField messageField;
@@ -23,10 +25,15 @@ public class PrivateChatFrame extends JFrame {
     private SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss");
     private JLabel statusLabel;
 
-    public PrivateChatFrame(User currentUser, String otherUser) {
+    public PrivateChatFrame(User currentUser, String otherUser, SimpleChatClient networkClient) {
         this.currentUser = currentUser;
         this.otherUser = otherUser;
         this.userService = new UserService();
+        this.networkClient = networkClient;
+
+        if (networkClient != null) {
+            networkClient.setMessageCallback(this::onNetworkMessage);
+        }
 
         setTitle("Czat z " + otherUser);
         setSize(500, 400);
@@ -122,21 +129,22 @@ public class PrivateChatFrame extends JFrame {
         userService.updateUserOnlineStatus(currentUser.getUsername());
     }
 
+    // JEDNA metoda sendMessage
     private void sendMessage() {
         String text = messageField.getText().trim();
         if (!text.isEmpty()) {
             String timestamp = timeFormat.format(new Date());
-            String from = currentUser.getUsername();
-            String to = otherUser;
-
-            // Format wiadomości do zapisu
-            String messageData = timestamp + "|" + from + "|" + to + "|" + text;
 
             // Wyświetl w oknie
             chatArea.append("[" + timestamp + "] Ja: " + text + "\n");
 
-            // Zapisz do pliku
-            saveMessage(messageData);
+            // Wyślij przez sieć jeśli jest połączenie
+            if (networkClient != null && networkClient.isConnected()) {
+                networkClient.sendPrivateMessage(otherUser, text);
+            }
+
+            // Zawsze zapisz do pliku (na wypadek braku sieci)
+            saveMessageToFile(timestamp, currentUser.getUsername(), otherUser, text);
 
             // Wyczyść pole
             messageField.setText("");
@@ -151,13 +159,14 @@ public class PrivateChatFrame extends JFrame {
         }
     }
 
-    private void saveMessage(String messageData) {
+    // Metoda do zapisu wiadomości do pliku
+    private void saveMessageToFile(String timestamp, String from, String to, String text) {
         try {
             new File(MESSAGES_DIR).mkdirs();
-            String filename = getChatFilename(currentUser.getUsername(), otherUser);
+            String filename = getChatFilename(from, to);
 
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(filename, true))) {
-                writer.write(messageData);
+                writer.write(timestamp + "|" + from + "|" + to + "|" + text);
                 writer.newLine();
             }
         } catch (IOException e) {
@@ -226,6 +235,26 @@ public class PrivateChatFrame extends JFrame {
                     Toolkit.getDefaultToolkit().beep();
                 }
             }
+        }
+    }
+
+    private void onNetworkMessage(String from, String text) {
+        if (from.equals(otherUser)) {
+            SwingUtilities.invokeLater(() -> {
+                String timestamp = timeFormat.format(new Date());
+                chatArea.append("[" + timestamp + "] " + otherUser + ": " + text + "\n");
+
+                // Zapisz też do pliku
+                saveMessageToFile(timestamp, from, currentUser.getUsername(), text);
+
+                // Powiadomienie
+                if (!isActive()) {
+                    Toolkit.getDefaultToolkit().beep();
+                }
+
+                // Przewiń na dół
+                chatArea.setCaretPosition(chatArea.getDocument().getLength());
+            });
         }
     }
 

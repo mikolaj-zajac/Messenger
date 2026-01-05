@@ -74,3 +74,10 @@
 [2026-01-05 21:12:27] Grupa 'aaaaaa': a napisał: ktos online?
 [2026-01-05 21:12:31] Grupa 'aaaaaa': b napisał: ja
 [2026-01-05 21:13:05] Użytkownik b wylogował się
+[2026-01-05 21:16:31] Użytkownik b zalogował się
+[2026-01-05 21:40:30] Użytkownik a zalogował się
+[2026-01-05 21:40:50] Użytkownik b zalogował się
+[2026-01-05 21:41:02] Prywatnie: b -> a: yo
+[2026-01-05 21:41:12] Prywatnie: a -> b: co tam
+[2026-01-05 21:41:17] Użytkownik a wylogował się
+[2026-01-05 21:41:23] Użytkownik b wylogował się

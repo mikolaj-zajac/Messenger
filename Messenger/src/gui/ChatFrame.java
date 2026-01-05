@@ -2,6 +2,7 @@ package gui;
 
 import model.User;
 import service.LoggerService;
+import service.SimpleChatClient;
 import service.UserService;
 
 import javax.swing.*;
@@ -14,34 +15,52 @@ public class ChatFrame extends JFrame {
     private User currentUser;
     private JPanel usersPanel = new JPanel();
     private static final String USERS_FILE = "Messenger/data/users.txt";
-    private JLabel statusLabel;
+    private JLabel connectionStatusLabel;
     private javax.swing.Timer refreshTimer;
     private javax.swing.Timer onlineTimer;
     private UserService userService;
     private JLabel onlineCountLabel;
+    private SimpleChatClient networkClient;
 
     public ChatFrame(User user) {
         this.currentUser = user;
         this.userService = new UserService();
 
         setTitle("Messenger - " + user.getUsername());
-        setSize(400, 550);
+        setSize(450, 600);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
+        // Próba automatycznego połączenia z serwerem
+        networkClient = new SimpleChatClient();
+        boolean connected = networkClient.connect(user.getUsername());
+
         initUI();
-        setVisible(true);
+
+        if (connected) {
+            connectionStatusLabel.setText("🟢 Połączono z serwerem");
+            connectionStatusLabel.setForeground(new Color(0, 150, 0));
+            System.out.println("Połączono z serwerem!");
+        } else {
+            connectionStatusLabel.setText("🔴 Tryb lokalny");
+            connectionStatusLabel.setForeground(Color.RED);
+            networkClient = null; // Tryb lokalny
+            System.out.println("Uruchomiono w trybie lokalnym");
+        }
+
         loadUsersFromFile();
         startAutoRefresh();
         startOnlineUpdater();
 
-        // Zaktualizuj swój status online
+        // Zaktualizuj swój status online (nawet w trybie lokalnym)
         userService.updateUserOnlineStatus(currentUser.getUsername());
+
+        setVisible(true);
     }
 
     private void startOnlineUpdater() {
-        // Co 5 sekund aktualizuj swój status online
-        onlineTimer = new javax.swing.Timer(5000, e -> {
+        // Co 10 sekund aktualizuj swój status online
+        onlineTimer = new javax.swing.Timer(10000, e -> {
             userService.updateUserOnlineStatus(currentUser.getUsername());
             refreshUserList();
         });
@@ -50,39 +69,31 @@ public class ChatFrame extends JFrame {
 
     private void initUI() {
         JPanel mainPanel = new JPanel(new GridBagLayout());
-        mainPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
 
         GridBagConstraints c = new GridBagConstraints();
-        c.insets = new Insets(8, 8, 8, 8);
+        c.insets = new Insets(6, 6, 6, 6);
         c.gridx = 0;
         c.weightx = 1.0;
 
-        // Panel statusu
-        JPanel statusPanel = new JPanel(new BorderLayout());
-
-        statusLabel = new JLabel("🟢 Jesteś online jako: " + currentUser.getUsername());
-        statusLabel.setFont(new Font("Arial", Font.BOLD, 12));
-        statusLabel.setForeground(new Color(0, 150, 0));
-
-        onlineCountLabel = new JLabel("0 online");
-        onlineCountLabel.setFont(new Font("Arial", Font.PLAIN, 10));
-        onlineCountLabel.setForeground(Color.GRAY);
-
-        statusPanel.add(statusLabel, BorderLayout.WEST);
-        statusPanel.add(onlineCountLabel, BorderLayout.EAST);
+        // Panel statusu połączenia
+        connectionStatusLabel = new JLabel("Łączenie...", SwingConstants.CENTER);
+        connectionStatusLabel.setFont(new Font("Arial", Font.BOLD, 12));
 
         c.gridy = 0;
         c.fill = GridBagConstraints.HORIZONTAL;
         c.weighty = 0;
-        mainPanel.add(statusPanel, c);
+        mainPanel.add(connectionStatusLabel, c);
 
+        // Tytuł
         JLabel title = new JLabel("Wybierz użytkownika do czatu");
-        title.setFont(new Font("Arial", Font.BOLD, 18));
+        title.setFont(new Font("Arial", Font.BOLD, 16));
         title.setHorizontalAlignment(SwingConstants.CENTER);
 
         c.gridy = 1;
         mainPanel.add(title, c);
 
+        // Panel z użytkownikami
         usersPanel.setLayout(new BoxLayout(usersPanel, BoxLayout.Y_AXIS));
         usersPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         usersPanel.setBackground(Color.WHITE);
@@ -97,6 +108,7 @@ public class ChatFrame extends JFrame {
         c.weighty = 1.0;
         mainPanel.add(scrollPane, c);
 
+        // Panel przycisków akcji
         JPanel buttonPanel = new JPanel(new GridLayout(1, 2, 10, 0));
         buttonPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
 
@@ -126,6 +138,7 @@ public class ChatFrame extends JFrame {
         c.weighty = 0;
         mainPanel.add(buttonPanel, c);
 
+        // Przycisk wylogowania
         JButton logoutBtn = new JButton("🚪 Wyloguj");
         logoutBtn.setFont(new Font("Arial", Font.BOLD, 14));
         logoutBtn.setFocusPainted(false);
@@ -161,7 +174,7 @@ public class ChatFrame extends JFrame {
         }
 
         userBtn.addActionListener(e -> {
-            new PrivateChatFrame(currentUser, username);
+            new PrivateChatFrame(currentUser, username, networkClient);
         });
 
         userBtn.setOpaque(true);
@@ -242,48 +255,62 @@ public class ChatFrame extends JFrame {
     private void loadUsersFromFile() {
         usersPanel.removeAll();
 
-        // Online użytkownicy
+        // Nagłówek użytkowników online
         List<String> onlineUsers = userService.getOnlineUsers();
         int onlineCount = 0;
 
         if (!onlineUsers.isEmpty()) {
-            JLabel onlineHeader = new JLabel("🟢 Online (" + onlineUsers.size() + ")");
-            onlineHeader.setFont(new Font("Arial", Font.BOLD, 14));
-            onlineHeader.setForeground(new Color(0, 150, 0));
-            onlineHeader.setAlignmentX(Component.CENTER_ALIGNMENT);
-            usersPanel.add(onlineHeader);
-            usersPanel.add(Box.createVerticalStrut(5));
+            onlineCount = onlineUsers.size() - (onlineUsers.contains(currentUser.getUsername()) ? 1 : 0);
 
-            for (String username : onlineUsers) {
-                if (!username.equals(currentUser.getUsername())) {
-                    addUserButton(username, true);
-                    onlineCount++;
+            if (onlineCount > 0) {
+                JLabel onlineHeader = new JLabel("🟢 Online (" + onlineCount + ")");
+                onlineHeader.setFont(new Font("Arial", Font.BOLD, 14));
+                onlineHeader.setForeground(new Color(0, 150, 0));
+                onlineHeader.setAlignmentX(Component.CENTER_ALIGNMENT);
+                usersPanel.add(onlineHeader);
+                usersPanel.add(Box.createVerticalStrut(5));
+
+                for (String username : onlineUsers) {
+                    if (!username.equals(currentUser.getUsername())) {
+                        addUserButton(username, true);
+                    }
                 }
             }
         }
 
-        // Offline użytkownicy
+        // Wszyscy użytkownicy (offline)
         try (BufferedReader br = new BufferedReader(new FileReader(USERS_FILE))) {
+            List<String> allUsers = new ArrayList<>();
             List<String> offlineUsers = new ArrayList<>();
 
             String line;
             while ((line = br.readLine()) != null) {
                 if (!line.startsWith("group:")) {
                     String username = line.split(";")[0];
-                    if (!username.equals(currentUser.getUsername()) &&
-                            !onlineUsers.contains(username)) {
-                        offlineUsers.add(username);
+                    if (!username.equals(currentUser.getUsername())) {
+                        allUsers.add(username);
                     }
                 }
             }
 
+            // Oddziel online od offline
+            for (String username : allUsers) {
+                boolean isOnline = onlineUsers.contains(username);
+                if (!isOnline) {
+                    offlineUsers.add(username);
+                }
+            }
+
             if (!offlineUsers.isEmpty()) {
-                usersPanel.add(Box.createVerticalStrut(10));
-                JLabel offlineHeader = new JLabel("⚫ Wszyscy (" + offlineUsers.size() + ")");
-                offlineHeader.setFont(new Font("Arial", Font.BOLD, 14));
-                offlineHeader.setForeground(Color.DARK_GRAY);
-                offlineHeader.setAlignmentX(Component.CENTER_ALIGNMENT);
-                usersPanel.add(offlineHeader);
+                if (onlineCount > 0) {
+                    usersPanel.add(Box.createVerticalStrut(10));
+                }
+
+                JLabel allUsersHeader = new JLabel("⚫ Wszyscy użytkownicy (" + offlineUsers.size() + ")");
+                allUsersHeader.setFont(new Font("Arial", Font.BOLD, 14));
+                allUsersHeader.setForeground(Color.BLACK);
+                allUsersHeader.setAlignmentX(Component.CENTER_ALIGNMENT);
+                usersPanel.add(allUsersHeader);
                 usersPanel.add(Box.createVerticalStrut(5));
 
                 for (String username : offlineUsers) {
@@ -291,8 +318,13 @@ public class ChatFrame extends JFrame {
                 }
             }
 
-            // Aktualizuj licznik online
-            onlineCountLabel.setText(onlineCount + " online");
+            if (allUsers.isEmpty() && onlineCount == 0) {
+                JLabel noUsersLabel = new JLabel("Brak innych użytkowników");
+                noUsersLabel.setFont(new Font("Arial", Font.ITALIC, 12));
+                noUsersLabel.setForeground(Color.GRAY);
+                noUsersLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+                usersPanel.add(noUsersLabel);
+            }
 
         } catch (IOException e) {
             JOptionPane.showMessageDialog(this,
@@ -316,7 +348,8 @@ public class ChatFrame extends JFrame {
     }
 
     private void startAutoRefresh() {
-        refreshTimer = new javax.swing.Timer(10000, e -> refreshUserList());
+        // Odświeżaj co 15 sekund
+        refreshTimer = new javax.swing.Timer(15000, e -> refreshUserList());
         refreshTimer.start();
     }
 
@@ -326,6 +359,11 @@ public class ChatFrame extends JFrame {
         }
         if (onlineTimer != null) {
             onlineTimer.stop();
+        }
+
+        // Rozłącz z serwerem
+        if (networkClient != null) {
+            networkClient.disconnect();
         }
 
         // Usuń swój status online
@@ -343,6 +381,10 @@ public class ChatFrame extends JFrame {
         }
         if (onlineTimer != null) {
             onlineTimer.stop();
+        }
+
+        if (networkClient != null) {
+            networkClient.disconnect();
         }
 
         userService.removeUserOnlineStatus(currentUser.getUsername());
