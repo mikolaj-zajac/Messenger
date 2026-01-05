@@ -12,10 +12,24 @@ public class ChatServer {
 
     public static void main(String[] args) {
         System.out.println("=== Messenger Server starting on port " + PORT + " ===");
+        System.out.println("Current directory: " + System.getProperty("user.dir"));
+
+        // Sprawdź czy plik users.txt istnieje
+        File usersFile = new File("Messenger/data/users.txt");
+        if (!usersFile.exists()) {
+            System.err.println("WARNING: users.txt not found in data/ directory");
+            System.err.println("Creating empty users file...");
+            try {
+                usersFile.getParentFile().mkdirs();
+                usersFile.createNewFile();
+            } catch (IOException e) {
+                System.err.println("Failed to create users file: " + e.getMessage());
+            }
+        }
 
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
             System.out.println("Server ready! Waiting for connections...");
-            System.out.println("URL: " + InetAddress.getLocalHost().getHostAddress() + ":" + PORT);
+            System.out.println("URL: " + getLocalIP() + ":" + PORT);
 
             while (true) {
                 Socket clientSocket = serverSocket.accept();
@@ -27,6 +41,15 @@ public class ChatServer {
             }
         } catch (IOException e) {
             System.err.println("Server error: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private static String getLocalIP() {
+        try {
+            return InetAddress.getLocalHost().getHostAddress();
+        } catch (UnknownHostException e) {
+            return "127.0.0.1";
         }
     }
 
@@ -43,12 +66,15 @@ public class ChatServer {
         if (recipient != null) {
             recipient.sendMessage("PRIVATE:" + fromUser + ":" + content);
         } else {
-            // Użytkownik offline - zapisz do bazy?
             System.out.println("User " + toUser + " is offline");
         }
     }
 
     public static List<String> getOnlineUsers() {
         return new ArrayList<>(userSessions.keySet());
+    }
+
+    public static int getOnlineCount() {
+        return userSessions.size();
     }
 }

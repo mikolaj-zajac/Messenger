@@ -2,24 +2,27 @@ package gui;
 
 import model.User;
 import service.LoggerService;
-import network.ChatClient;
+import service.UserService;
 
 import javax.swing.*;
 import java.awt.*;
 import java.io.*;
-import java.util.ArrayList;
+import java.util.*;
 import java.util.List;
 
 public class ChatFrame extends JFrame {
     private User currentUser;
     private JPanel usersPanel = new JPanel();
     private static final String USERS_FILE = "Messenger/data/users.txt";
-    private ChatClient chatClient;
     private JLabel statusLabel;
     private javax.swing.Timer refreshTimer;
+    private javax.swing.Timer onlineTimer;
+    private UserService userService;
+    private JLabel onlineCountLabel;
 
     public ChatFrame(User user) {
         this.currentUser = user;
+        this.userService = new UserService();
 
         setTitle("Messenger - " + user.getUsername());
         setSize(400, 550);
@@ -28,77 +31,21 @@ public class ChatFrame extends JFrame {
 
         initUI();
         setVisible(true);
-
-        // Inicjalizacja połączenia sieciowego
-        initNetworkConnection();
-
-        // Załaduj początkową listę użytkowników
-        if (chatClient != null && chatClient.isConnected()) {
-            loadOnlineUsers();
-        } else {
-            loadUsersFromFile();
-        }
-
-        // Timer do odświeżania listy online co 30 sekund
+        loadUsersFromFile();
         startAutoRefresh();
+        startOnlineUpdater();
+
+        // Zaktualizuj swój status online
+        userService.updateUserOnlineStatus(currentUser.getUsername());
     }
 
-    private void initNetworkConnection() {
-        // Tymczasowo wyłączone - dopóki nie masz ChatClient.java
-
-        chatClient = new ChatClient(new ChatClient.MessageListener() {
-            @Override
-            public void onMessageReceived(String from, String content) {
-                SwingUtilities.invokeLater(() -> {
-                    showNewMessageNotification(from, content);
-                });
-            }
-
-            @Override
-            public void onOnlineUsersUpdated(List<String> users) {
-                SwingUtilities.invokeLater(() -> {
-                    updateOnlineUsersList(users);
-                });
-            }
-
-            @Override
-            public void onConnectionStatusChanged(boolean connected) {
-                SwingUtilities.invokeLater(() -> {
-                    updateConnectionStatus(connected);
-                });
-            }
-
-            @Override
-            public void onGroupMessageReceived(String groupName, String from, String content) {
-                SwingUtilities.invokeLater(() -> {
-                    showNewGroupMessageNotification(groupName, from, content);
-                });
-            }
+    private void startOnlineUpdater() {
+        // Co 5 sekund aktualizuj swój status online
+        onlineTimer = new javax.swing.Timer(5000, e -> {
+            userService.updateUserOnlineStatus(currentUser.getUsername());
+            refreshUserList();
         });
-
-        // Próba połączenia z serwerem
-        String serverAddress = "automatic-space-rotary-phone-r4g7gjpvq5xrh5gvp-8080.app.github.dev"; // TYLKO NAZWA HOSTA!
-        int serverPort = 8080; // HTTPS port, nie 8080!
-
-        boolean connected = chatClient.connect(
-            serverAddress,
-            serverPort,
-            currentUser.getUsername(),
-            currentUser.getPassword()
-        );
-
-        if (!connected) {
-            JOptionPane.showMessageDialog(this,
-                "Nie można połączyć z serwerem czatu.\n" +
-                "Działanie w trybie offline - tylko czat prywatny lokalnie.",
-                "Tryb offline",
-                JOptionPane.WARNING_MESSAGE);
-        }
-
-
-        // Tymczasowy status
-//        statusLabel.setText("🔴 Tryb offline (brak ChatClient.java)");
-//        statusLabel.setForeground(Color.RED);
+        onlineTimer.start();
     }
 
     private void initUI() {
@@ -111,15 +58,23 @@ public class ChatFrame extends JFrame {
         c.weightx = 1.0;
 
         // Panel statusu
-        statusLabel = new JLabel("🔴 Rozłączony");
+        JPanel statusPanel = new JPanel(new BorderLayout());
+
+        statusLabel = new JLabel("🟢 Jesteś online jako: " + currentUser.getUsername());
         statusLabel.setFont(new Font("Arial", Font.BOLD, 12));
-        statusLabel.setHorizontalAlignment(SwingConstants.CENTER);
-        statusLabel.setForeground(Color.RED);
+        statusLabel.setForeground(new Color(0, 150, 0));
+
+        onlineCountLabel = new JLabel("0 online");
+        onlineCountLabel.setFont(new Font("Arial", Font.PLAIN, 10));
+        onlineCountLabel.setForeground(Color.GRAY);
+
+        statusPanel.add(statusLabel, BorderLayout.WEST);
+        statusPanel.add(onlineCountLabel, BorderLayout.EAST);
 
         c.gridy = 0;
         c.fill = GridBagConstraints.HORIZONTAL;
         c.weighty = 0;
-        mainPanel.add(statusLabel, c);
+        mainPanel.add(statusPanel, c);
 
         JLabel title = new JLabel("Wybierz użytkownika do czatu");
         title.setFont(new Font("Arial", Font.BOLD, 18));
@@ -128,7 +83,6 @@ public class ChatFrame extends JFrame {
         c.gridy = 1;
         mainPanel.add(title, c);
 
-        // Panel z przyciskami użytkowników
         usersPanel.setLayout(new BoxLayout(usersPanel, BoxLayout.Y_AXIS));
         usersPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         usersPanel.setBackground(Color.WHITE);
@@ -143,7 +97,6 @@ public class ChatFrame extends JFrame {
         c.weighty = 1.0;
         mainPanel.add(scrollPane, c);
 
-        // Panel przycisków akcji
         JPanel buttonPanel = new JPanel(new GridLayout(1, 2, 10, 0));
         buttonPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
 
@@ -173,7 +126,6 @@ public class ChatFrame extends JFrame {
         c.weighty = 0;
         mainPanel.add(buttonPanel, c);
 
-        // Przycisk wylogowania
         JButton logoutBtn = new JButton("🚪 Wyloguj");
         logoutBtn.setFont(new Font("Arial", Font.BOLD, 14));
         logoutBtn.setFocusPainted(false);
@@ -189,53 +141,6 @@ public class ChatFrame extends JFrame {
         add(mainPanel);
     }
 
-    private void updateConnectionStatus(boolean connected) {
-        if (connected) {
-            statusLabel.setText("🟢 Połączony z serwerem");
-            statusLabel.setForeground(new Color(34, 139, 34));
-        } else {
-            statusLabel.setText("🔴 Rozłączony - tryb offline");
-            statusLabel.setForeground(Color.RED);
-        }
-    }
-
-    private void updateOnlineUsersList(List<String> onlineUsers) {
-        usersPanel.removeAll();
-
-        // Dodaj nagłówek
-        JLabel onlineHeader = new JLabel("🟢 Użytkownicy online (" + onlineUsers.size() + ")");
-        onlineHeader.setFont(new Font("Arial", Font.BOLD, 14));
-        onlineHeader.setForeground(new Color(34, 139, 34));
-        onlineHeader.setAlignmentX(Component.CENTER_ALIGNMENT);
-        usersPanel.add(onlineHeader);
-        usersPanel.add(Box.createVerticalStrut(10));
-
-        // Dodaj użytkowników online
-        boolean hasOnlineUsers = false;
-        for (String username : onlineUsers) {
-            if (!username.equals(currentUser.getUsername())) {
-                addUserButton(username, true);
-                hasOnlineUsers = true;
-            }
-        }
-
-        if (!hasOnlineUsers) {
-            JLabel noUsersLabel = new JLabel("Brak innych użytkowników online");
-            noUsersLabel.setFont(new Font("Arial", Font.ITALIC, 12));
-            noUsersLabel.setForeground(Color.GRAY);
-            noUsersLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-            usersPanel.add(noUsersLabel);
-        }
-
-        usersPanel.add(Box.createVerticalStrut(20));
-
-        // Dodaj grupy z pliku
-        loadGroupsFromFile();
-
-        usersPanel.revalidate();
-        usersPanel.repaint();
-    }
-
     private void addUserButton(String username, boolean online) {
         JButton userBtn = new JButton();
         userBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 50));
@@ -245,21 +150,19 @@ public class ChatFrame extends JFrame {
 
         if (online) {
             userBtn.setText("🟢 " + username);
-            userBtn.setBackground(new Color(240, 248, 255));
+            userBtn.setBackground(new Color(220, 255, 220));
             userBtn.setForeground(Color.BLACK);
-            userBtn.addActionListener(e -> {
-                if (chatClient != null && chatClient.isConnected()) {
-                    new PrivateChatFrame(currentUser, username, chatClient);
-                } else {
-                    new PrivateChatFrame(currentUser, username);
-                }
-            });
+            userBtn.setFont(new Font("Arial", Font.BOLD, 13));
         } else {
             userBtn.setText("⚫ " + username);
             userBtn.setBackground(new Color(245, 245, 245));
             userBtn.setForeground(Color.GRAY);
-            userBtn.setEnabled(false);
+            userBtn.setFont(new Font("Arial", Font.PLAIN, 13));
         }
+
+        userBtn.addActionListener(e -> {
+            new PrivateChatFrame(currentUser, username);
+        });
 
         userBtn.setOpaque(true);
         userBtn.setBorderPainted(false);
@@ -269,7 +172,6 @@ public class ChatFrame extends JFrame {
     }
 
     private void loadGroupsFromFile() {
-        // Nagłówek grup
         JLabel groupsHeader = new JLabel("👥 Twoje grupy");
         groupsHeader.setFont(new Font("Arial", Font.BOLD, 14));
         groupsHeader.setForeground(new Color(138, 43, 226));
@@ -306,16 +208,11 @@ public class ChatFrame extends JFrame {
                         groupBtn.setBorderPainted(false);
                         groupBtn.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
 
-                        // Podpis z członkami
                         String membersText = "Członkowie: " + String.join(", ", members);
                         groupBtn.setToolTipText(membersText);
 
                         groupBtn.addActionListener(e -> {
-                            if (chatClient != null && chatClient.isConnected()) {
-                                new GroupChatFrame(currentUser, groupName, chatClient);
-                            } else {
-                                new GroupChatFrame(currentUser, groupName, chatClient);
-                            }
+                            new GroupChatFrame(currentUser, groupName);
                         });
 
                         usersPanel.add(groupBtn);
@@ -345,38 +242,57 @@ public class ChatFrame extends JFrame {
     private void loadUsersFromFile() {
         usersPanel.removeAll();
 
-        // Nagłówek wszystkich użytkowników
-        JLabel allUsersHeader = new JLabel("👤 Wszyscy użytkowników");
-        allUsersHeader.setFont(new Font("Arial", Font.BOLD, 14));
-        allUsersHeader.setForeground(Color.BLACK);
-        allUsersHeader.setAlignmentX(Component.CENTER_ALIGNMENT);
-        usersPanel.add(allUsersHeader);
-        usersPanel.add(Box.createVerticalStrut(10));
+        // Online użytkownicy
+        List<String> onlineUsers = userService.getOnlineUsers();
+        int onlineCount = 0;
 
+        if (!onlineUsers.isEmpty()) {
+            JLabel onlineHeader = new JLabel("🟢 Online (" + onlineUsers.size() + ")");
+            onlineHeader.setFont(new Font("Arial", Font.BOLD, 14));
+            onlineHeader.setForeground(new Color(0, 150, 0));
+            onlineHeader.setAlignmentX(Component.CENTER_ALIGNMENT);
+            usersPanel.add(onlineHeader);
+            usersPanel.add(Box.createVerticalStrut(5));
+
+            for (String username : onlineUsers) {
+                if (!username.equals(currentUser.getUsername())) {
+                    addUserButton(username, true);
+                    onlineCount++;
+                }
+            }
+        }
+
+        // Offline użytkownicy
         try (BufferedReader br = new BufferedReader(new FileReader(USERS_FILE))) {
-            List<String> allUsers = new ArrayList<>();
+            List<String> offlineUsers = new ArrayList<>();
 
             String line;
             while ((line = br.readLine()) != null) {
                 if (!line.startsWith("group:")) {
                     String username = line.split(";")[0];
-                    if (!username.equals(currentUser.getUsername())) {
-                        allUsers.add(username);
+                    if (!username.equals(currentUser.getUsername()) &&
+                            !onlineUsers.contains(username)) {
+                        offlineUsers.add(username);
                     }
                 }
             }
 
-            if (allUsers.isEmpty()) {
-                JLabel noUsersLabel = new JLabel("Brak innych użytkowników");
-                noUsersLabel.setFont(new Font("Arial", Font.ITALIC, 12));
-                noUsersLabel.setForeground(Color.GRAY);
-                noUsersLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-                usersPanel.add(noUsersLabel);
-            } else {
-                for (String username : allUsers) {
+            if (!offlineUsers.isEmpty()) {
+                usersPanel.add(Box.createVerticalStrut(10));
+                JLabel offlineHeader = new JLabel("⚫ Wszyscy (" + offlineUsers.size() + ")");
+                offlineHeader.setFont(new Font("Arial", Font.BOLD, 14));
+                offlineHeader.setForeground(Color.DARK_GRAY);
+                offlineHeader.setAlignmentX(Component.CENTER_ALIGNMENT);
+                usersPanel.add(offlineHeader);
+                usersPanel.add(Box.createVerticalStrut(5));
+
+                for (String username : offlineUsers) {
                     addUserButton(username, false);
                 }
             }
+
+            // Aktualizuj licznik online
+            onlineCountLabel.setText(onlineCount + " online");
 
         } catch (IOException e) {
             JOptionPane.showMessageDialog(this,
@@ -391,20 +307,8 @@ public class ChatFrame extends JFrame {
         usersPanel.repaint();
     }
 
-    private void loadOnlineUsers() {
-        if (chatClient != null && chatClient.isConnected()) {
-            chatClient.requestOnlineUsers();
-        } else {
-            loadUsersFromFile();
-        }
-    }
-
     private void refreshUserList() {
-        if (chatClient != null && chatClient.isConnected()) {
-            loadOnlineUsers();
-        } else {
-            loadUsersFromFile();
-        }
+        loadUsersFromFile();
     }
 
     public void refresh() {
@@ -412,79 +316,22 @@ public class ChatFrame extends JFrame {
     }
 
     private void startAutoRefresh() {
-        refreshTimer = new javax.swing.Timer(30000, e -> refreshUserList());
+        refreshTimer = new javax.swing.Timer(10000, e -> refreshUserList());
         refreshTimer.start();
     }
 
-    private void showNewMessageNotification(String from, String content) {
-        // Pokazuje powiadomienie o nowej wiadomości
-        if (!isActive()) {
-            Toolkit.getDefaultToolkit().beep();
-
-            JDialog notification = new JDialog(this, "Nowa wiadomość", false);
-            notification.setLayout(new BorderLayout());
-            notification.setSize(300, 150);
-            notification.setLocationRelativeTo(this);
-
-            JLabel messageLabel = new JLabel("<html><b>" + from + "</b>:<br/>" +
-                    (content.length() > 50 ? content.substring(0, 50) + "..." : content) + "</html>");
-            messageLabel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-
-            JButton openBtn = new JButton("Otwórz czat");
-            openBtn.addActionListener(e -> {
-                notification.dispose();
-                new PrivateChatFrame(currentUser, from, chatClient);
-            });
-
-            notification.add(messageLabel, BorderLayout.CENTER);
-            notification.add(openBtn, BorderLayout.SOUTH);
-            notification.setVisible(true);
-        }
-    }
-
-    private void showNewGroupMessageNotification(String groupName, String from, String content) {
-        // Pokazuje powiadomienie o nowej wiadomości w grupie
-        if (!isActive()) {
-            Toolkit.getDefaultToolkit().beep();
-
-            JDialog notification = new JDialog(this, "Nowa wiadomość w grupie", false);
-            notification.setLayout(new BorderLayout());
-            notification.setSize(350, 150);
-            notification.setLocationRelativeTo(this);
-
-            JLabel messageLabel = new JLabel("<html><b>" + from + "</b> w <b>" + groupName + "</b>:<br/>" +
-                    (content.length() > 50 ? content.substring(0, 50) + "..." : content) + "</html>");
-            messageLabel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-
-            JButton openBtn = new JButton("Otwórz grupę");
-            openBtn.addActionListener(e -> {
-                notification.dispose();
-                if (chatClient != null && chatClient.isConnected()) {
-                    new GroupChatFrame(currentUser, groupName, chatClient);
-                } else {
-                    new GroupChatFrame(currentUser, groupName, chatClient);
-                }
-            });
-
-            notification.add(messageLabel, BorderLayout.CENTER);
-            notification.add(openBtn, BorderLayout.SOUTH);
-            notification.setVisible(true);
-        }
-    }
-
     private void logout() {
-        // Zatrzymaj timer
         if (refreshTimer != null) {
             refreshTimer.stop();
         }
-
-        // Zamknij połączenie sieciowe
-        if (chatClient != null) {
-            chatClient.disconnect();
+        if (onlineTimer != null) {
+            onlineTimer.stop();
         }
 
-        LoggerService.write("Użytkownik " + currentUser.getUsername() + " wylogował się");
+        // Usuń swój status online
+        userService.removeUserOnlineStatus(currentUser.getUsername());
 
+        LoggerService.write("Użytkownik " + currentUser.getUsername() + " wylogował się");
         dispose();
         new LoginFrame();
     }
@@ -494,9 +341,12 @@ public class ChatFrame extends JFrame {
         if (refreshTimer != null) {
             refreshTimer.stop();
         }
-        if (chatClient != null) {
-            chatClient.disconnect();
+        if (onlineTimer != null) {
+            onlineTimer.stop();
         }
+
+        userService.removeUserOnlineStatus(currentUser.getUsername());
+
         super.dispose();
     }
 }

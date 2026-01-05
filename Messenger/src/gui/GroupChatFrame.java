@@ -1,106 +1,151 @@
 package gui;
 
 import model.User;
-import network.ChatClient;
+import service.LoggerService;
 
 import javax.swing.*;
 import java.awt.*;
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
+import java.io.*;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 public class GroupChatFrame extends JFrame {
-
     private User currentUser;
     private String groupName;
 
     private JTextArea messagesArea;
     private JTextArea messageInput;
+    private javax.swing.Timer refreshTimer;
+    private static final String GROUP_MESSAGES_FILE = "Messenger/data/groups/messages.txt";
+    private SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss");
 
-    public GroupChatFrame(User currentUser, String groupName, ChatClient chatClient) {
+    public GroupChatFrame(User currentUser, String groupName) {
         this.currentUser = currentUser;
         this.groupName = groupName;
 
         setTitle("Grupa: " + groupName);
-        setSize(550, 600);
+        setSize(600, 500);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
 
         initUI();
+        loadMessages();
+        startAutoRefresh();
         setVisible(true);
     }
 
     private void initUI() {
+        // Główny panel
         JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        JPanel topPanel = new JPanel(new BorderLayout());
+        // Nagłówek
+        JLabel titleLabel = new JLabel("Grupa: " + groupName, SwingConstants.CENTER);
+        titleLabel.setFont(new Font("Arial", Font.BOLD, 16));
+        mainPanel.add(titleLabel, BorderLayout.NORTH);
 
-        JButton backBtn = new JButton("← Powrót");
-        backBtn.setFocusPainted(false);
-        backBtn.addActionListener(e -> dispose());
-
-        String membersText = getGroupMembersText();
-
-        JLabel titleLabel = new JLabel("<html>👥 " + groupName + "<br><small>Członkowie: " + membersText + "</small></html>");
-        titleLabel.setFont(new Font("Arial", Font.BOLD, 14));
-        titleLabel.setHorizontalAlignment(SwingConstants.CENTER);
-
-        topPanel.add(backBtn, BorderLayout.WEST);
-        topPanel.add(titleLabel, BorderLayout.CENTER);
-
-        mainPanel.add(topPanel, BorderLayout.NORTH);
-
+        // Obszar wiadomości
         messagesArea = new JTextArea();
         messagesArea.setEditable(false);
-        messagesArea.setLineWrap(true);
-        messagesArea.setWrapStyleWord(true);
+        messagesArea.setFont(new Font("Arial", Font.PLAIN, 12));
+        JScrollPane scrollPane = new JScrollPane(messagesArea);
+        mainPanel.add(scrollPane, BorderLayout.CENTER);
 
-        JScrollPane messagesScroll = new JScrollPane(messagesArea);
-        messagesScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
-
-        mainPanel.add(messagesScroll, BorderLayout.CENTER);
-
-        JPanel inputPanel = new JPanel(new BorderLayout(8, 8));
+        // Panel wprowadzania
+        JPanel inputPanel = new JPanel(new BorderLayout(5, 5));
 
         messageInput = new JTextArea(3, 30);
-        messageInput.setLineWrap(true);
-        messageInput.setWrapStyleWord(true);
+        messageInput.setFont(new Font("Arial", Font.PLAIN, 12));
 
-        JScrollPane inputScroll = new JScrollPane(messageInput);
-        inputScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        JButton sendButton = new JButton("Wyślij");
+        sendButton.addActionListener(e -> sendMessage());
 
-        JButton sendBtn = new JButton("Wyślij");
-        sendBtn.setFocusPainted(false);
-
-        // sendBtn.addActionListener(e -> sendGroupMessage());
-
-        inputPanel.add(inputScroll, BorderLayout.CENTER);
-        inputPanel.add(sendBtn, BorderLayout.EAST);
+        inputPanel.add(new JScrollPane(messageInput), BorderLayout.CENTER);
+        inputPanel.add(sendButton, BorderLayout.EAST);
 
         mainPanel.add(inputPanel, BorderLayout.SOUTH);
 
         add(mainPanel);
     }
 
-    private String getGroupMembersText() {
-        File file = new File("data/users.txt");
+    private void sendMessage() {
+        String text = messageInput.getText().trim();
+        if (!text.isEmpty()) {
+            String timestamp = timeFormat.format(new Date());
+            String messageLine = timestamp + " | " + currentUser.getUsername() + ": " + text;
 
-        if (!file.exists()) return "";
+            // Wyświetl w oknie
+            messagesArea.append(messageLine + "\n");
 
-        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                if (line.startsWith("group:" + groupName + ";")) {
-                    String membersPart = line.split(";", 2)[1]; // jan,anna,piotr
-                    return membersPart.replace(",", ", ");
-                }
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
+            // Zapisz do pliku
+            saveMessage(messageLine);
+
+            // Wyczyść pole
+            messageInput.setText("");
+
+            LoggerService.write("Grupa '" + groupName + "': " + currentUser.getUsername() + " napisał: " + text);
         }
-        return "";
     }
 
+    private void saveMessage(String message) {
+        try {
+            // Utwórz katalog jeśli nie istnieje
+            new File("Messenger/data/groups").mkdirs();
+
+            // Zapisz do pliku z nazwą grupy
+            String filename = "Messenger/data/groups/" + groupName + ".txt";
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(filename, true))) {
+                writer.write(message);
+                writer.newLine();
+            }
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(this, "Błąd zapisu: " + e.getMessage());
+        }
+    }
+
+    private void loadMessages() {
+        String filename = "Messenger/data/groups/" + groupName + ".txt";
+        File file = new File(filename);
+
+        if (file.exists()) {
+            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+                messagesArea.setText(""); // Wyczyść
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    messagesArea.append(line + "\n");
+                }
+            } catch (IOException e) {
+                JOptionPane.showMessageDialog(this, "Błąd odczytu: " + e.getMessage());
+            }
+        }
+    }
+
+    private void startAutoRefresh() {
+        // Odświeżaj co 2 sekundy
+        refreshTimer = new javax.swing.Timer(2000, e -> checkForNewMessages());
+        refreshTimer.start();
+    }
+
+    private void checkForNewMessages() {
+        String filename = "Messenger/data/groups/" + groupName + ".txt";
+        File file = new File(filename);
+
+        if (file.exists()) {
+            long lastModified = file.lastModified();
+            long currentTime = System.currentTimeMillis();
+
+            // Jeśli plik był modyfikowany w ciągu ostatnich 5 sekund
+            if (currentTime - lastModified < 5000) {
+                loadMessages();
+            }
+        }
+    }
+
+    @Override
+    public void dispose() {
+        if (refreshTimer != null) {
+            refreshTimer.stop();
+        }
+        super.dispose();
+    }
 }

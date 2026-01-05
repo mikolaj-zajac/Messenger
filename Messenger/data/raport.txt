@@ -25,3 +25,52 @@
 [2026-01-05 18:48:17] Użytkownik a zalogował się
 [2026-01-05 18:54:43] Użytkownik a zalogował się
 [2026-01-05 18:59:00] Użytkownik a zalogował się
+[2026-01-05 20:07:49] Użytkownik a zalogował się
+[2026-01-05 20:08:13] Użytkownik a zalogował się
+[2026-01-05 20:08:30] Użytkownik b zalogował się
+[2026-01-05 20:15:06] Użytkownik a zalogował się
+[2026-01-05 20:15:15] Użytkownik b zalogował się
+[2026-01-05 20:15:47] Utworzono grupę o nazwie: aa, członkowie grupy: a, b
+[2026-01-05 20:17:15] Użytkownik a zalogował się
+[2026-01-05 20:17:35] Użytkownik a zalogował się
+[2026-01-05 20:17:39] Użytkownik b zalogował się
+[2026-01-05 20:18:00] b wysłał wiadomość do a: siema
+[2026-01-05 20:18:07] a wysłał wiadomość do b: hej
+[2026-01-05 20:27:25] Użytkownik a zalogował się
+[2026-01-05 20:27:34] Użytkownik b zalogował się
+[2026-01-05 20:28:22] Użytkownik a zalogował się
+[2026-01-05 20:28:30] Użytkownik b zalogował się
+[2026-01-05 20:29:00] a wysłał wiadomość do b: urwo
+[2026-01-05 20:29:09] b wysłał wiadomość do a: ?/?
+[2026-01-05 20:29:12] Zamknięto czat b z a
+[2026-01-05 20:29:20] Zamknięto czat b z a
+[2026-01-05 20:29:21] Zamknięto czat b z a
+[2026-01-05 20:29:26] Zamknięto czat a z b
+[2026-01-05 20:29:28] Zamknięto czat b z a
+[2026-01-05 20:29:30] Zamknięto czat b z a
+[2026-01-05 20:49:42] Użytkownik a zalogował się
+[2026-01-05 20:49:48] Użytkownik b zalogował się
+[2026-01-05 20:50:16] b wysłał wiadomość do a: hhh
+[2026-01-05 20:50:19] Zamknięto czat b z a
+[2026-01-05 20:50:22] Zamknięto czat a z b
+[2026-01-05 20:50:43] Zamknięto czat a z b
+[2026-01-05 20:50:44] Zamknięto czat b z a
+[2026-01-05 20:50:53] Grupa 'aaaaaa': b napisał: ddd
+[2026-01-05 20:50:58] Grupa 'aaaaaa': a napisał: bbbb
+[2026-01-05 20:59:11] Użytkownik a zalogował się
+[2026-01-05 21:00:45] Użytkownik a zalogował się
+[2026-01-05 21:01:50] Użytkownik a zalogował się
+[2026-01-05 21:02:00] Użytkownik b zalogował się
+[2026-01-05 21:02:42] Użytkownik a zalogował się
+[2026-01-05 21:02:53] Użytkownik b zalogował się
+[2026-01-05 21:03:22] Użytkownik a zalogował się
+[2026-01-05 21:03:31] Użytkownik b zalogował się
+[2026-01-05 21:03:48] Prywatnie: b -> a: m
+[2026-01-05 21:03:52] Prywatnie: a -> b: n
+[2026-01-05 21:11:27] Użytkownik a zalogował się
+[2026-01-05 21:11:32] Użytkownik b zalogował się
+[2026-01-05 21:12:00] Prywatnie: a -> b: siema
+[2026-01-05 21:12:06] Prywatnie: b -> a: hejka
+[2026-01-05 21:12:27] Grupa 'aaaaaa': a napisał: ktos online?
+[2026-01-05 21:12:31] Grupa 'aaaaaa': b napisał: ja
+[2026-01-05 21:13:05] Użytkownik b wylogował się

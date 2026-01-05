@@ -1,351 +1,241 @@
 package gui;
 
 import model.User;
-import network.ChatClient;
 import service.LoggerService;
+import service.UserService;
 
 import javax.swing.*;
-import javax.swing.text.*;
 import java.awt.*;
-import java.awt.event.KeyAdapter;
-import java.awt.event.KeyEvent;
 import java.io.*;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 public class PrivateChatFrame extends JFrame {
     private User currentUser;
-    private String receiver;
-    private ChatClient chatClient;
+    private String otherUser;
+    private UserService userService;
 
-    private JTextPane messagesArea; // ZMIENIONE: JTextPane zamiast JTextArea
-    private JTextArea messageInput;
-    private JButton sendButton;
+    private JTextArea chatArea;
+    private JTextField messageField;
+    private javax.swing.Timer refreshTimer;
+    private javax.swing.Timer statusTimer;
+    private static final String MESSAGES_DIR = "Messenger/data/private/";
+    private SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss");
     private JLabel statusLabel;
-    private static final String CHAT_DIR = "data/chats/";
 
-    public PrivateChatFrame(User currentUser, String receiver, ChatClient chatClient) {
+    public PrivateChatFrame(User currentUser, String otherUser) {
         this.currentUser = currentUser;
-        this.receiver = receiver;
-        this.chatClient = chatClient;
-        initUI();
-        loadChatHistory();
-        setVisible(true);
-    }
+        this.otherUser = otherUser;
+        this.userService = new UserService();
 
-    public PrivateChatFrame(User currentUser, String receiver) {
-        this(currentUser, receiver, null);
-    }
-
-    private void initUI() {
-        setTitle("Czat z " + receiver);
-        setSize(600, 700);
+        setTitle("Czat z " + otherUser);
+        setSize(500, 400);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
 
+        initUI();
+        loadMessages();
+        startAutoRefresh();
+        startStatusChecker();
+        updateOwnOnlineStatus();
+        setVisible(true);
+    }
+
+    private void initUI() {
         JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-        mainPanel.setBackground(new Color(240, 240, 240));
 
-        JPanel topPanel = createTopPanel();
+        // Górny panel z nazwą i statusem
+        JPanel topPanel = new JPanel(new BorderLayout());
+
+        JButton backBtn = new JButton("←");
+        backBtn.setFocusPainted(false);
+        backBtn.addActionListener(e -> dispose());
+
+        statusLabel = new JLabel(otherUser, SwingConstants.CENTER);
+        statusLabel.setFont(new Font("Arial", Font.BOLD, 14));
+        updateStatusLabel();
+
+        JButton refreshBtn = new JButton("🔄");
+        refreshBtn.setToolTipText("Odśwież");
+        refreshBtn.setFocusPainted(false);
+        refreshBtn.addActionListener(e -> {
+            loadMessages();
+            updateStatusLabel();
+        });
+
+        topPanel.add(backBtn, BorderLayout.WEST);
+        topPanel.add(statusLabel, BorderLayout.CENTER);
+        topPanel.add(refreshBtn, BorderLayout.EAST);
+
         mainPanel.add(topPanel, BorderLayout.NORTH);
 
-        JPanel messagesPanel = createMessagesPanel();
-        mainPanel.add(messagesPanel, BorderLayout.CENTER);
+        // Obszar czatu
+        chatArea = new JTextArea();
+        chatArea.setEditable(false);
+        chatArea.setLineWrap(true);
+        chatArea.setWrapStyleWord(true);
+        chatArea.setFont(new Font("Arial", Font.PLAIN, 12));
+        chatArea.setBackground(new Color(250, 250, 250));
 
-        JPanel inputPanel = createInputPanel();
+        JScrollPane scrollPane = new JScrollPane(chatArea);
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
+
+        mainPanel.add(scrollPane, BorderLayout.CENTER);
+
+        // Panel wprowadzania
+        JPanel inputPanel = new JPanel(new BorderLayout(5, 5));
+
+        messageField = new JTextField();
+        messageField.setFont(new Font("Arial", Font.PLAIN, 12));
+        messageField.addActionListener(e -> sendMessage());
+
+        JButton sendButton = new JButton("Wyślij");
+        sendButton.setFocusPainted(false);
+        sendButton.setBackground(new Color(70, 130, 180));
+        sendButton.setForeground(Color.WHITE);
+        sendButton.addActionListener(e -> sendMessage());
+
+        inputPanel.add(messageField, BorderLayout.CENTER);
+        inputPanel.add(sendButton, BorderLayout.EAST);
+
         mainPanel.add(inputPanel, BorderLayout.SOUTH);
 
         add(mainPanel);
-        messageInput.requestFocus();
-    }
-
-    private JPanel createTopPanel() {
-        JPanel topPanel = new JPanel(new BorderLayout(10, 10));
-        topPanel.setBackground(Color.WHITE);
-        topPanel.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(200, 200, 200)),
-                BorderFactory.createEmptyBorder(10, 10, 10, 10)
-        ));
-
-        JButton backBtn = new JButton("← Powrót");
-        backBtn.setFont(new Font("Arial", Font.PLAIN, 12));
-        backBtn.setFocusPainted(false);
-        backBtn.setBackground(new Color(240, 240, 240));
-        backBtn.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
-        backBtn.addActionListener(e -> dispose());
-
-        JLabel chatInfoLabel = new JLabel();
-        chatInfoLabel.setFont(new Font("Arial", Font.BOLD, 16));
-
-        if (chatClient != null && chatClient.isConnected()) {
-            chatInfoLabel.setText("🟢 Rozmowa z: " + receiver);
-            chatInfoLabel.setForeground(new Color(34, 139, 34));
-        } else {
-            chatInfoLabel.setText("⚫ Rozmowa z: " + receiver + " (offline)");
-            chatInfoLabel.setForeground(Color.DARK_GRAY);
-        }
-
-        chatInfoLabel.setHorizontalAlignment(SwingConstants.CENTER);
-
-        statusLabel = new JLabel();
-        updateStatusLabel();
-
-        topPanel.add(backBtn, BorderLayout.WEST);
-        topPanel.add(chatInfoLabel, BorderLayout.CENTER);
-        topPanel.add(statusLabel, BorderLayout.EAST);
-
-        return topPanel;
-    }
-
-    private JPanel createMessagesPanel() {
-        JPanel messagesPanel = new JPanel(new BorderLayout());
-        messagesPanel.setBackground(Color.WHITE);
-        messagesPanel.setBorder(BorderFactory.createLineBorder(new Color(220, 220, 220)));
-
-        // Używamy JTextPane zamiast JTextArea dla formatowania
-        messagesArea = new JTextPane();
-        messagesArea.setEditable(false);
-        messagesArea.setFont(new Font("Arial", Font.PLAIN, 14));
-        messagesArea.setBackground(new Color(250, 250, 250));
-        messagesArea.setMargin(new Insets(10, 10, 10, 10));
-
-        // Ustawienie edytora tekstu dla lepszego formatowania
-        StyledDocument doc = messagesArea.getStyledDocument();
-
-        // Styl dla normalnego tekstu
-        Style defaultStyle = doc.addStyle("default", null);
-        StyleConstants.setFontFamily(defaultStyle, "Arial");
-        StyleConstants.setFontSize(defaultStyle, 14);
-
-        JScrollPane messagesScroll = new JScrollPane(messagesArea);
-        messagesScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
-        messagesScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-        messagesScroll.getVerticalScrollBar().setUnitIncrement(16);
-        messagesScroll.setBorder(null);
-
-        messagesPanel.add(messagesScroll, BorderLayout.CENTER);
-
-        return messagesPanel;
-    }
-
-    private JPanel createInputPanel() {
-        JPanel inputPanel = new JPanel(new BorderLayout(10, 10));
-        inputPanel.setBackground(Color.WHITE);
-        inputPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
-
-        messageInput = new JTextArea(3, 40);
-        messageInput.setLineWrap(true);
-        messageInput.setWrapStyleWord(true);
-        messageInput.setFont(new Font("Arial", Font.PLAIN, 14));
-        messageInput.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(180, 180, 180)),
-                BorderFactory.createEmptyBorder(10, 10, 10, 10)
-        ));
-
-        messageInput.addKeyListener(new KeyAdapter() {
-            @Override
-            public void keyPressed(KeyEvent e) {
-                if (e.getKeyCode() == KeyEvent.VK_ENTER && !e.isShiftDown()) {
-                    e.consume();
-                    sendMessage();
-                }
-            }
-        });
-
-        JScrollPane inputScroll = new JScrollPane(messageInput);
-        inputScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
-        inputScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-        inputScroll.setBorder(null);
-
-        sendButton = new JButton("Wyślij");
-        sendButton.setFont(new Font("Arial", Font.BOLD, 14));
-        sendButton.setFocusPainted(false);
-        sendButton.setPreferredSize(new Dimension(100, 50));
-        sendButton.setBackground(new Color(70, 130, 180));
-        sendButton.setForeground(Color.WHITE);
-        sendButton.setOpaque(true);
-        sendButton.setBorderPainted(false);
-        sendButton.addActionListener(e -> sendMessage());
-
-        getRootPane().setDefaultButton(sendButton);
-
-        inputPanel.add(inputScroll, BorderLayout.CENTER);
-        inputPanel.add(sendButton, BorderLayout.EAST);
-
-        return inputPanel;
     }
 
     private void updateStatusLabel() {
-        if (chatClient != null && chatClient.isConnected()) {
-            statusLabel.setText("🟢 Online");
-            statusLabel.setForeground(new Color(34, 139, 34));
-            sendButton.setEnabled(true);
-            sendButton.setBackground(new Color(70, 130, 180));
+        boolean isOnline = userService.isUserOnline(otherUser);
+
+        if (isOnline) {
+            statusLabel.setText("🟢 " + otherUser + " (online)");
+            statusLabel.setForeground(new Color(0, 150, 0));
+            statusLabel.setFont(new Font("Arial", Font.BOLD, 14));
         } else {
-            statusLabel.setText("🔴 Offline");
-            statusLabel.setForeground(Color.RED);
-            sendButton.setEnabled(true);
-            sendButton.setBackground(new Color(169, 169, 169));
+            statusLabel.setText("⚫ " + otherUser + " (offline)");
+            statusLabel.setForeground(Color.GRAY);
+            statusLabel.setFont(new Font("Arial", Font.PLAIN, 14));
         }
-        statusLabel.setFont(new Font("Arial", Font.PLAIN, 12));
+    }
+
+    private void updateOwnOnlineStatus() {
+        userService.updateUserOnlineStatus(currentUser.getUsername());
     }
 
     private void sendMessage() {
-        String content = messageInput.getText().trim();
-        if (content.isEmpty()) {
-            return;
-        }
+        String text = messageField.getText().trim();
+        if (!text.isEmpty()) {
+            String timestamp = timeFormat.format(new Date());
+            String from = currentUser.getUsername();
+            String to = otherUser;
 
-        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm"));
+            // Format wiadomości do zapisu
+            String messageData = timestamp + "|" + from + "|" + to + "|" + text;
 
-        if (chatClient != null && chatClient.isConnected()) {
-            chatClient.sendPrivateMessage(receiver, content);
-            appendMessageToUI("Ty", content, timestamp, true);
-            saveMessageToFile(currentUser.getUsername(), receiver, content, timestamp);
+            // Wyświetl w oknie
+            chatArea.append("[" + timestamp + "] Ja: " + text + "\n");
 
-            LoggerService.write("Wiadomość od " + currentUser.getUsername() +
-                    " do " + receiver + ": " + content);
-        } else {
-            appendMessageToUI("Ty", content, timestamp, true);
-            saveMessageToFile(currentUser.getUsername(), receiver, content, timestamp);
+            // Zapisz do pliku
+            saveMessage(messageData);
 
-            JOptionPane.showMessageDialog(this,
-                    "Wiadomość zapisana lokalnie.\n" +
-                            "Odbiorca otrzyma ją gdy oboje będziecie online.",
-                    "Tryb offline",
-                    JOptionPane.INFORMATION_MESSAGE);
-        }
+            // Wyczyść pole
+            messageField.setText("");
 
-        messageInput.setText("");
-        messageInput.requestFocus();
-        scrollToBottom();
-    }
+            // Zaktualizuj swój status online
+            updateOwnOnlineStatus();
 
-    private void appendMessageToUI(String sender, String content, String timestamp, boolean isOwnMessage) {
-        SwingUtilities.invokeLater(() -> {
-            try {
-                StyledDocument doc = messagesArea.getStyledDocument();
+            LoggerService.write("Prywatnie: " + currentUser.getUsername() + " -> " + otherUser + ": " + text);
 
-                // Dodaj pustą linię między wiadomościami (opcjonalnie)
-                if (doc.getLength() > 0) {
-                    doc.insertString(doc.getLength(), "\n", null);
-                }
-
-                // Styl dla nadawcy i czasu
-                Style senderStyle = doc.addStyle("senderStyle", null);
-                if (isOwnMessage) {
-                    StyleConstants.setForeground(senderStyle, new Color(18, 140, 126)); // Zielony jak WhatsApp
-                } else {
-                    StyleConstants.setForeground(senderStyle, new Color(7, 94, 84)); // Ciemniejszy zielony
-                }
-                StyleConstants.setBold(senderStyle, true);
-                StyleConstants.setFontSize(senderStyle, 14);
-
-                // Styl dla czasu
-                Style timeStyle = doc.addStyle("timeStyle", null);
-                StyleConstants.setForeground(timeStyle, Color.GRAY);
-                StyleConstants.setFontSize(timeStyle, 11);
-                StyleConstants.setItalic(timeStyle, true);
-
-                // Styl dla treści wiadomości
-                Style contentStyle = doc.addStyle("contentStyle", null);
-                StyleConstants.setForeground(contentStyle, Color.BLACK);
-                StyleConstants.setFontSize(contentStyle, 14);
-
-                // Dodaj nadawcę
-                String senderText = sender + " ";
-                doc.insertString(doc.getLength(), senderText, senderStyle);
-
-                // Dodaj czas
-                doc.insertString(doc.getLength(), timestamp + "\n", timeStyle);
-
-                // Dodaj treść wiadomości
-                doc.insertString(doc.getLength(), content + "\n", contentStyle);
-
-                // Dodaj separator (opcjonalnie)
-                Style separatorStyle = doc.addStyle("separatorStyle", null);
-                StyleConstants.setForeground(separatorStyle, new Color(220, 220, 220));
-                doc.insertString(doc.getLength(), "----------------------------------------\n", separatorStyle);
-
-                scrollToBottom();
-
-            } catch (BadLocationException e) {
-                e.printStackTrace();
-            }
-        });
-    }
-
-    private void scrollToBottom() {
-        SwingUtilities.invokeLater(() -> {
-            messagesArea.setCaretPosition(messagesArea.getDocument().getLength());
-        });
-    }
-
-    private void saveMessageToFile(String from, String to, String content, String timestamp) {
-        File chatDir = new File(CHAT_DIR);
-        if (!chatDir.exists()) {
-            chatDir.mkdirs();
-        }
-
-        String fileName = getChatFileName(from, to);
-        File chatFile = new File(CHAT_DIR + fileName);
-
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(chatFile, true))) {
-            writer.write(timestamp + ";" + from + ";" + to + ";" + content);
-            writer.newLine();
-        } catch (IOException e) {
-            System.err.println("Błąd zapisu wiadomości: " + e.getMessage());
+            // Przewiń na dół
+            chatArea.setCaretPosition(chatArea.getDocument().getLength());
         }
     }
 
-    private void loadChatHistory() {
-        String fileName = getChatFileName(currentUser.getUsername(), receiver);
-        File chatFile = new File(CHAT_DIR + fileName);
+    private void saveMessage(String messageData) {
+        try {
+            new File(MESSAGES_DIR).mkdirs();
+            String filename = getChatFilename(currentUser.getUsername(), otherUser);
 
-        if (!chatFile.exists()) {
-            return;
-        }
-
-        try (BufferedReader reader = new BufferedReader(new FileReader(chatFile))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                String[] parts = line.split(";", 4);
-                if (parts.length == 4) {
-                    String timestamp = parts[0];
-                    String sender = parts[1];
-                    String recipient = parts[2];
-                    String content = parts[3];
-
-                    boolean isOwnMessage = sender.equals(currentUser.getUsername());
-                    appendMessageToUI(sender, content, timestamp, isOwnMessage);
-                }
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(filename, true))) {
+                writer.write(messageData);
+                writer.newLine();
             }
         } catch (IOException e) {
-            System.err.println("Błąd wczytywania historii: " + e.getMessage());
+            JOptionPane.showMessageDialog(this, "Błąd zapisu: " + e.getMessage());
         }
     }
 
-    private String getChatFileName(String user1, String user2) {
-        if (user1.compareTo(user2) < 0) {
-            return user1 + "_" + user2 + ".txt";
-        } else {
-            return user2 + "_" + user1 + ".txt";
+    private String getChatFilename(String user1, String user2) {
+        String[] users = {user1, user2};
+        java.util.Arrays.sort(users);
+        return MESSAGES_DIR + users[0] + "_" + users[1] + ".txt";
+    }
+
+    private void loadMessages() {
+        String filename = getChatFilename(currentUser.getUsername(), otherUser);
+        File file = new File(filename);
+
+        if (file.exists()) {
+            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+                chatArea.setText("");
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String[] parts = line.split("\\|", 4);
+                    if (parts.length == 4) {
+                        String time = parts[0];
+                        String from = parts[1];
+                        String to = parts[2];
+                        String text = parts[3];
+
+                        String displayName = from.equals(currentUser.getUsername()) ? "Ja" : otherUser;
+                        chatArea.append("[" + time + "] " + displayName + ": " + text + "\n");
+                    }
+                }
+                chatArea.setCaretPosition(chatArea.getDocument().getLength());
+            } catch (IOException e) {
+                JOptionPane.showMessageDialog(this, "Błąd odczytu: " + e.getMessage());
+            }
         }
     }
 
-    public void receiveMessage(String from, String content) {
-        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm"));
-        appendMessageToUI(from, content, timestamp, false);
-        saveMessageToFile(from, currentUser.getUsername(), content, timestamp);
+    private void startAutoRefresh() {
+        refreshTimer = new javax.swing.Timer(2000, e -> {
+            checkForNewMessages();
+            updateOwnOnlineStatus(); // Zawsze aktualizuj swój status gdy okno jest otwarte
+        });
+        refreshTimer.start();
+    }
 
-        Toolkit.getDefaultToolkit().beep();
+    private void startStatusChecker() {
+        statusTimer = new javax.swing.Timer(3000, e -> updateStatusLabel());
+        statusTimer.start();
+    }
+
+    private void checkForNewMessages() {
+        String filename = getChatFilename(currentUser.getUsername(), otherUser);
+        File file = new File(filename);
+
+        if (file.exists()) {
+            long lastModified = file.lastModified();
+            long currentTime = System.currentTimeMillis();
+
+            if (currentTime - lastModified < 3000) {
+                loadMessages();
+
+                if (!isActive()) {
+                    Toolkit.getDefaultToolkit().beep();
+                }
+            }
+        }
     }
 
     @Override
     public void dispose() {
-        if (chatClient != null) {
-            // Opcjonalnie: powiadom serwer o opuszczeniu czatu
+        if (refreshTimer != null) {
+            refreshTimer.stop();
+        }
+        if (statusTimer != null) {
+            statusTimer.stop();
         }
         super.dispose();
     }
