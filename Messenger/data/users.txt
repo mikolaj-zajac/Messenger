@@ -9,4 +9,4 @@ group:cccccc;aaa,b,maciej
 group:aaaaa;aaa,a,b,maciej,pawel
 q;q
 group:rts;aaa,maciej,pawel
-group:turrthgffgh;a,b,aaa,maciej,pawel,q
+group:turrthgffgh;a,b,aaa,maciej,pawel,qgroup:asssdada;a,b

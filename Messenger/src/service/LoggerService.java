@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
 
 public class LoggerService {
 
-    private static final String REPORT_FILE = "data/raport.txt";
+    private static final String REPORT_FILE = "Messenger/data/raport.txt";
 
     public static void write(String message) {
         File file = new File(REPORT_FILE);

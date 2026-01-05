@@ -9,3 +9,14 @@
 [2026-01-04 18:40:10] Użytkownik a zalogował się
 [2026-01-04 18:40:14] Użytkownik a wylogował się
 [2026-01-04 18:40:41] Użytkownik aaa zalogował się
+[2026-01-05 16:42:08] Użytkownik a zalogował się
+[2026-01-05 17:50:50] Użytkownik a zalogował się
+[2026-01-05 17:52:10] Utworzono grupę o nazwie: asssdada, członkowie grupy: a, b
+[2026-01-05 17:52:51] Użytkownik a zalogował się
+[2026-01-05 17:54:24] Użytkownik a zalogował się
+[2026-01-05 17:55:03] Użytkownik a zalogował się
+[2026-01-05 17:58:06] Użytkownik b zalogował się
+[2026-01-05 18:03:06] Użytkownik a zalogował się
+[2026-01-05 18:03:13] Użytkownik b zalogował się
+[2026-01-05 18:06:59] Użytkownik a zalogował się
+[2026-01-05 18:07:24] Użytkownik b zalogował się

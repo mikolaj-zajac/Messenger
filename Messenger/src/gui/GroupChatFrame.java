@@ -1,6 +1,7 @@
 package gui;
 
 import model.User;
+import network.ChatClient;
 
 import javax.swing.*;
 import java.awt.*;
@@ -17,7 +18,7 @@ public class GroupChatFrame extends JFrame {
     private JTextArea messagesArea;
     private JTextArea messageInput;
 
-    public GroupChatFrame(User currentUser, String groupName) {
+    public GroupChatFrame(User currentUser, String groupName, ChatClient chatClient) {
         this.currentUser = currentUser;
         this.groupName = groupName;
 

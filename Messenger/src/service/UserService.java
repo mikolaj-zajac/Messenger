@@ -4,7 +4,7 @@ import java.io.*;
 import java.util.*;
 
 public class UserService {
-    private static final String FILE = "data/users.txt";
+    private static final String FILE = "Messenger/data/users.txt";
     private List<User> users = new ArrayList<>();
 
     public UserService() {

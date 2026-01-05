@@ -11,7 +11,7 @@ import java.util.List;
 
 public class CreateGroupFrame extends JFrame {
 
-    private static final String USERS_FILE = "data/users.txt";
+    private static final String USERS_FILE = "Messenger/data/users.txt";
 
     private User currentUser;
     private ChatFrame chatFrame;

@@ -1,0 +1,25 @@
+{
+  "name": "Messenger Server",
+  "image": "mcr.microsoft.com/devcontainers/java:1-17",
+
+  "features": {
+    "ghcr.io/devcontainers/features/java:1": {
+      "version": "17",
+      "mavenVersion": "3.8"
+    }
+  },
+
+  "forwardPorts": [8080],
+
+  "postCreateCommand": "echo 'Installing dependencies...' && cd server && javac -cp . *.java",
+
+  "postStartCommand": "echo '=== Messenger Server Starting ===' && cd /workspaces/Messenger/server && java -cp . server.ServerMain &",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "vscjava.vscode-java-pack"
+      ]
+    }
+  }
+}
