@@ -1,0 +1,5 @@
+b;a;siema
+a;b;hej
+a;b;urwo
+b;a;?/?
+b;a;hhh
